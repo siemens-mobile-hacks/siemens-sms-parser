@@ -1,61 +1,6 @@
 /*
  * Based on http://smstools3.kekekasvi.com/topic.php?id=288
- * April 2010: Futher changes and functionality by Keijo Kasvi.
- * http://smstools3.kekekasvi.com - Feel free to use this code as you wish.
- *
- * 01.09.2017
- * - Converted sevenbit tables, not yet completely tested.
- *
- * 06.06.2017
- * - Fixed handling of TP-DCS when coding group bits are 1111xxxx.
- *
- * 15.01.2017
- * - < and > are now shown in a browser.
- *
- * 18.05.2011
- * - Recurring and starting spaces in message text are now shown in a browser.
- *
- * 06.04.2011
- * - Fixed handling of TP-DCS when coding group bits are 1111xxxx.
- *
- * 24.03.2011
- * - Added index column to the user data translation.
- *
- * 09.08.2010
- * - Added hexadecimal dump for 8bit messages.
- *
- * 23.07.2010
- * - Added "Type Of Address" selection.
- *
- * 23.05.2010
- * - Added handling for pdu= query variable.
- *
- * 13.05.2010
- * - Result code of a status report is explained.
- *
- * 22.04.2010
- * - Fix: The modified code did not show if a receipt was requested.
- *
- * 11.04.2010
- * - USSD Entry/Display now supports UCS2. Alphabet is not detected from the Cell Broadcast PDU,
- *   use radio buttons to select alphabet.
- *
- * 10.04.2010
- * - Type Of Address is explained.
- * - User Data Header is extracted from the PDU and shown as a hex string.
- * - Fixed incorrectly taken discharge timestamp in status report. Changed all timezone handling.
- *
- * 09.04.2010
- * - New layout, user friendly with long PDU's.
- * - Handling for extended characters (encode and decode).
- * - Update counting when alphabet size is changed.
- * - Plain User Data is created using USSD packing character.
- * - Can decode GSM 7bit packed (USSD) User Data.
- * - Can decode Cell Broadcast PDU (7bit).
- * - etc...
- */
-
-/* Script written by Swen-Peter Ekkebus, edited by Ing. Milan Chudik.
+ * Script written by Swen-Peter Ekkebus, edited by Ing. Milan Chudik.
  *
  * Further fixes and functionality by Andrew Alexander:
  * Fix message length issues, handle +xx  & 0xx phone codes, added bit length options,
@@ -79,65 +24,10 @@ var esc = '\u261d';
 var bad = '\u2639';
 */
 
-//Array with "The 7 bit defaultalphabet"
-/*
-sevenbitdefault = new Array(
-	'@',	'ï¿½',	'$',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',	'\n',	'ï¿½',	'ï¿½',	'\r',	'ï¿½',	'ï¿½',
-	'\u0394',	'_',	'\u03a6',	'\u0393',	'\u039b',	'\u03a9',	'\u03a0',	'\u03a8',
-	'\u03a3',	'\u0398',	'\u039e',	esc,	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',
-	' ',	'!',	'"',	'#',	'ï¿½',	'%',	'&',	'\'',	'(',	')',	'*',	'+',	',',	'-',	'.',	'/',
-	'0',	'1',	'2',	'3',	'4',	'5',	'6',	'7',	'8',	'9',	':',	';',	'<',	'=',	'>',	'?',
-	'ï¿½',	'A',	'B',	'C',	'D',	'E',	'F',	'G',	'H',	'I',	'J',	'K',	'L',	'M',	'N',	'O',
-	'P',	'Q',	'R',	'S',	'T',	'U',	'V',	'W',	'X',	'Y',	'Z',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',
-	'ï¿½',	'a',	'b',	'c',	'd',	'e',	'f',	'g',	'h',	'i',	'j',	'k',	'l',	'm',	'n',	'o',
-	'p',	'q',	'r',	's',	't',	'u',	'v',	'w',	'x',	'y',	'z',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½',	'ï¿½'
-);
-
-sevenbitextended = new Array(
-	'\f',	0x0A,	// '\u000a',	// <FF>
-	'^',	0x14,	// '\u0014',	// CIRCUMFLEX ACCENT
-	'{',	0x28,	// '\u0028',	// LEFT CURLY BRACKET
-	'}',	0x29,	// '\u0029',	// RIGHT CURLY BRACKET
-	'\\',	0x2F,	// '\u002f',	// REVERSE SOLIDUS
-	'[',	0x3C,	// '\u003c',	// LEFT SQUARE BRACKET
-	'~',	0x3D,	// '\u003d',	// TILDE
-	']',	0x3E,	// '\u003e',	// RIGHT SQUARE BRACKET
-	'|',	0x40,	// '\u0040',	// VERTICAL LINE \u7c
-	'ï¿½',	0x65 	// '\u0065'	// EURO SIGN ï¿½
-);
-*/
-
 var esc = '\u001b'; //'\u261d';
 var bad = '\u2639';
 
-//Array with "The 7 bit defaultalphabet"
-/*
-sevenbitdefault_utf8 = new Array(
-        '@',    'Â£',    '$',    'Â¥',    'Ã¨',    'Ã©',    'Ã¹',    'Ã¬',
-        'Ã²',    'Ã‡',    '\n',   'Ã˜',    'Ã¸',    '\r',   'Ã…',    'Ã¥',
 
-        '\u0394', '_', '\u03a6', '\u0393', '\u039b', '\u03a9', '\u03a0', '\u03a8',
-        '\u03a3', '\u0398', '\u039e', esc, 'Ã†', 'Ã¦', 'ÃŸ', 'Ã‰',
-
-        ' ',    '!',    '"',    '#',    'Â¤',    '%',    '&',    '\'',
-        '(',    ')',    '*',    '+',    ',',    '-',    '.',    '/',
-
-        '0',    '1',    '2',    '3',    '4',    '5',    '6',    '7',
-        '8',    '9',    ':',    ';',    '<',    '=',    '>',    '?',
-
-        'Â¡',    'A',    'B',    'C',    'D',    'E',    'F',    'G',
-        'H',    'I',    'J',    'K',    'L',    'M',    'N',    'O',
-
-        'P',    'Q',    'R',    'S',    'T',    'U',    'V',    'W',
-        'X',    'Y',    'Z',    'Ã„',    'Ã–',    'Ã‘',    'Ãœ',    'Â§',
-
-        'Â¿',    'a',    'b',    'c',    'd',    'e',    'f',    'g',
-        'h',    'i',    'j',    'k',    'l',    'm',    'n',    'o',
-
-        'p',    'q',    'r',    's',    't',    'u',    'v',    'w',
-        'x',    'y',    'z',    'Ã¤',    'Ã¶',    'Ã±',    'Ã¼',    'Ã '
-);
-*/
 
 sevenbitdefault = ['@', '\u00a3', '$', '\u00a5', '\u00e8', '\u00e9', '\u00f9', '\u00ec',
         '\u00f2', '\u00c7', '\n', '\u00d8', '\u00f8', '\r', '\u00c5', '\u00e5',
@@ -854,7 +744,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 	else // Receive Message
 	if ((HexToNum(firstOctet_SMSDeliver) & 0x03) == 0) // Receive Message
 	{
-		out = "<B>SMS DELIVER (receive)</B>"+linefeed;
+		out = "SMS DELIVER (receive)"+linefeed;
 
 		out += "Receipt requested: ";
 		if ((HexToNum(firstOctet_SMSDeliver) & 0x20) == 0x20)
@@ -1014,7 +904,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 	}
 	else
 	{
-		out =  "<B>SMS STATUS REPORT</B>"+linefeed;
+		out =  "SMS STATUS REPORT"+linefeed;
 
 		var MessageReference = HexToNum(PDUString.substr(start,2)); // ??? Correct this name
 		start = start + 2;
