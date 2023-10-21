@@ -198,16 +198,6 @@ function getQueryVariable(variable)
 	return ""; 
 }
 
-function showCalculator() 
-{
-	myWin=open('calculator.html','','width=500,height=480,resizable=yes,location=no,directories=no,toolbar=no,status=no,scrollbars=yes');
-}
-
-function trim(stringToTrim)
-{
-	return stringToTrim.replace(/^\s+|\s+$/g,"");
-}
-
 // function te convert a bit string into a integer
 function binToInt(x)//sp
 {
@@ -2080,11 +2070,23 @@ function sizeMemo(val)
 
 	set_rows(0,val,'smsMemo');
 }
-
 const fs = require('fs');
+
+// Function to show usage information
+function showUsage() {
+    console.log("Usage: node <script_name> <file_name>");
+    console.log("Reads a file starting from byte 18 and processes its content.");
+}
 
 // Get the file name from the command-line arguments
 const fileName = process.argv[2];
+
+// If no file name provided, show usage and exit
+if (!fileName) {
+    console.error("Error: No file name provided.");
+    showUsage();
+    process.exit(1);
+}
 
 // Read the file asynchronously starting from byte 18
 fs.open(fileName, 'r', (err, fd) => {
