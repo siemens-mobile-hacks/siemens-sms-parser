@@ -66,9 +66,9 @@
  * Feel free to use it, please don't forget to link to the source ;)
  *
  *
- * www.rednaxela.net - Feel free to use this code as you wish. 
+ * www.rednaxela.net - Feel free to use this code as you wish.
  * Version 1.5 r9aja
- * 
+ *
  * Official BPS develop tool
  *
  * (c) BPS & co, 2003
@@ -139,8 +139,7 @@ sevenbitdefault_utf8 = new Array(
 );
 */
 
-sevenbitdefault = new Array(
-        '@', '\u00a3', '$', '\u00a5', '\u00e8', '\u00e9', '\u00f9', '\u00ec',
+sevenbitdefault = ['@', '\u00a3', '$', '\u00a5', '\u00e8', '\u00e9', '\u00f9', '\u00ec',
         '\u00f2', '\u00c7', '\n', '\u00d8', '\u00f8', '\r', '\u00c5', '\u00e5',
 
         '\u0081', '_', '\u0082', '\u0083', '\u0084', '\u0085', '\u0086', '\u0087',
@@ -162,11 +161,9 @@ sevenbitdefault = new Array(
         'h',    'i',    'j',    'k',    'l',    'm',    'n',    'o',
 
         'p',    'q',    'r',    's',    't',    'u',    'v',    'w',
-        'x',    'y',    'z',    '\u00e4', '\u00f6', '\u00f1', '\u00fc', '\u00e0'
-);
+        'x',    'y',    'z',    '\u00e4', '\u00f6', '\u00f1', '\u00fc', '\u00e0'];
 
-sevenbitextended = new Array(
-        '\f',   0x0A,   // '\u000a',    // <FF>
+sevenbitextended = ['\f',   0x0A,   // '\u000a',    // <FF>
         '^',    0x14,   // '\u0014',    // CIRCUMFLEX ACCENT
         '{',    0x28,   // '\u0028',    // LEFT CURLY BRACKET
         '}',    0x29,   // '\u0029',    // RIGHT CURLY BRACKET
@@ -176,33 +173,17 @@ sevenbitextended = new Array(
         ']',    0x3E,   // '\u003e',    // RIGHT SQUARE BRACKET
         '|',    0x40,   // '\u0040',    // VERTICAL LINE \u007c
         //'\u00a4', 0x65,       // '\u0065',    // EURO SIGN â‚¬
-        '\u20ac', 0x65  // '\u0065'     // EURO SIGN â‚¬
-);
+        '\u20ac', 0x65];
 
 // Variable that stores the information to show the user the calculation of the translation
 var calculation = "";
 
-var maxChars = 160;
-var alerted = true; //false;
-
-function getQueryVariable(variable)
-{
-	var query = window.location.search.substring(1);
-	var vars = query.split("&");
-	for (var i=0;i<vars.length;i++)
-	{
-		var pair = vars[i].split("=");
-		if (pair[0] == variable)
-			return pair[1];
-	}
-	return ""; 
-}
 
 // function te convert a bit string into a integer
 function binToInt(x)//sp
 {
-	var total = 0;	
-	var power = parseInt(x.length)-1;	
+	var total = 0;
+	var power = parseInt(x.length)-1;
 
 	for(var i=0;i<x.length;i++)
 	{
@@ -226,7 +207,7 @@ function decode_timezone(timezone)
 	tz += parseInt(timezone.substring(1, 2), 10);
 
 	var tz_hour = Math.floor(tz / 4);
-	var tz_min = 15 * (tz % 4) 
+	var tz_min = 15 * (tz % 4)
 
 	if (tz_hour < 10)
 		result += '0';
@@ -256,11 +237,11 @@ function intToBin(x,size) //sp
 function HexToNum(numberS)
 {
 	var tens = MakeNum(numberS.substring(0,1));
-	
+
 	var ones = 0;
 	if(numberS.length > 1) // means two characters entered
 		ones=MakeNum(numberS.substring(1,2));
-	if(ones == 'X') 
+	if(ones == 'X')
 	{
 		return "00";
 	}
@@ -268,11 +249,11 @@ function HexToNum(numberS)
 }
 
 // helper function for HexToNum
-function MakeNum(str) 
+function MakeNum(str)
 {
 	if((str >= '0') && (str <= '9'))
 		return str;
-	switch(str.toUpperCase()) 
+	switch(str.toUpperCase())
 	{
 		case "A": return 10;
 		case "B": return 11;
@@ -289,9 +270,9 @@ function MakeNum(str)
 //function to convert integer to Hex
 function intToHex(i) //sp
  {
-  var sHex = "0123456789ABCDEF";	
-  h = ""; 
-  i = parseInt(i);	
+  var sHex = "0123456789ABCDEF";
+  h = "";
+  i = parseInt(i);
   for(j = 0; j <= 3; j++)
   {
     h += sHex.charAt((i >> (j * 8 + 4)) & 0x0F) +
@@ -300,50 +281,12 @@ function intToHex(i) //sp
   return h.substring(0,2);
 }
 
-function ToHex(i)
-{
-	var sHex = "0123456789ABCDEF";
-	var Out = "";
-
-	Out = sHex.charAt(i&0xf);
-	i>>=4;
-	Out = sHex.charAt(i&0xf) + Out;
-
-	return Out;
-}
-
 function getSevenBitExtendedCh(code)
 {
 	for (var i = 0; i < sevenbitextended.length; i += 2)
 		if (sevenbitextended[i +1] == code)
 			return sevenbitextended[i];
 	return bad;
-}
-
-function getSevenBitExt(character)
-{
-	for (var i = 0; i < sevenbitextended.length; i += 2)
-		if (sevenbitextended[i] == character)
-			return sevenbitextended[i +1];
-	return 0;
-}
-
-function getSevenBit(character)
-{
-	for (var i = 0; i < sevenbitdefault.length; i++)
-		if (sevenbitdefault[i] == character)
-			return i;
-	return 0;
-}
-
-function getEightBit(character)
-{
-	return character;
-}
-
-function get16Bit(character)
-{
-	return character;
 }
 
 function phoneNumberMap(character)
@@ -373,25 +316,6 @@ function phoneNumberMap(character)
 	return 'F';
 }
 
-function phoneNumberUnMap(chararacter)
-{
-	if((chararacter >= '0') && (chararacter <= '9'))
-	{
-		return chararacter;
-	}
-	switch(chararacter)
-	{
-		case 10: return '*';
-		case 11: return '#';
-		case 12: return 'A';
-		case 13: return 'B';
-		case 14: return 'C';
-		default:
-			return 'F';
-	}
-	return 'F';
-}
-
 // function to convert semioctets to a string
 function semiOctetToString(inp) //sp
 {
@@ -409,9 +333,9 @@ function semiOctetToString(inp) //sp
 function getUserMessage(skip_characters, input,truelength) // Add truelength AJA
 {
 	var byteString = "";
-	octetArray = new Array();
-	restArray = new Array();
-	septetsArray = new Array();
+	octetArray = [];
+	restArray = [];
+	septetsArray = [];
 	var s=1;
 	var count = 0;
 	var matchcount = 0; // AJA
@@ -587,205 +511,6 @@ function getUserMessage8(skip_characters, input,truelength)
 	}
 	
 	return smsMessage;
-}
-
-//Function to build a popup window with the calculation a information
-function showCalculation() 
-{
-	if(calculation.length != 0)
-	{
-		//myWin=open('','','width=800,height=200,resizable=yes,location=no,directories=no,toolbar=no,status=no,scrollbars=yes');
-		myWin=open('','','height=200,resizable=yes,location=no,directories=no,toolbar=no,status=no,scrollbars=yes');
-		var b='<html><head><title>User data translation</title></head><body>'+calculation+'</body></html>';
-		a=myWin.document;
-		a.open();
-		a.write(b);
-		a.close();
-	}	
-}
-
-function encodeGSM7bitPacked(inpString)
-{
-	var octetFirst = "";
-	var octetSecond = ""; 
-	var output = "";
-	var padding = String.fromCharCode(0x0D);
-	var tmp = inpString;
-	var inpStr = "";
-
-	for (var i = 0; i < tmp.length; i++)
-	{
-		if (getSevenBitExt(tmp.charAt(i)))
-			inpStr += String.fromCharCode(0x1B);
-
-		inpStr += tmp.charAt(i);
-	}
-
-	var len = inpStr.length;
-	if ((len % 8 == 7) || (len % 8 == 0 && len > 0 && inpStr.charAt(len - 1) == padding))
-		inpStr += padding;
-
-	for (var i = 0; i <= inpStr.length; i++)
-	{
-		if (i == inpStr.length)
-		{
-			if (octetSecond != "") // AJA Fix overshoot
-			{
-				output = output + "" + (intToHex(binToInt(octetSecond)));
-			}
-			break;
-		}
-
-		if (inpStr.charAt(i) == String.fromCharCode(0x1B))
-			current = intToBin(0x1B,7);
-		else
-		{
-			tmp = getSevenBitExt(inpStr.charAt(i));
-			if (tmp == 0)
-				tmp = getSevenBit(inpStr.charAt(i));
-			else
-				tmp = getSevenBitExt(inpStr.charAt(i));
-
-			current = intToBin(tmp,7);
-		}
-
-		var currentOctet;
-		if(i!=0 && i%8!=0)
-		{
-			octetFirst = current.substring(7-(i)%8);
-			currentOctet = octetFirst + octetSecond;	//put octet parts together
-			
-			output = output + "" + (intToHex(binToInt(currentOctet)));
-			octetSecond = current.substring(0,7-(i)%8);	//set net second octet
-		}
-		else
-		{
-			octetSecond = current.substring(0,7-(i)%8);
-		}	
-	}
-
-	document.getElementById('ussdText').value = output;
-	change_ussd(7);
-
-	document.getElementById('pduTool').cell_broadcast.checked = false;
-}
-
-function explain_cell_broadcast(inpString)
-{
-	var result = "";
-	var alphabet = HexToNum(inpString.substring(8, 10));
-	var explain_alphabet = "";
-
-	if ((alphabet & 0xF0) == 0)
-		explain_alphabet = " Default Alphabet (7bit)";
-	else if ((alphabet & 0xF0) == 0x10)
-	{
-		if ((alphabet & 0x0F) == 0)
-			explain_alphabet = " Default Alphabet (7bit), message preceeded by language indication";
-		else if ((alphabet & 0x0F) == 0x01)
-			explain_alphabet = " UCS2 (16bit), message preceeded by language indication";
-	}
-	else if ((alphabet & 0xC0) == 0x40)
-	{
-		if ((alphabet & 0x0C) == 0)
-			explain_alphabet = " Default Alphabet (7bit)";
-		else if ((alphabet & 0x0C) == 0x04)
-			explain_alphabet = " 8bit data";
-		else if ((alphabet & 0x0C) == 0x08)
-			explain_alphabet = " UCS2 (16bit)";
-		else if ((alphabet & 0x0C) == 0x0C)
-			explain_alphabet = " Reserved";
-	}
-
-	result += "Serial number: "+inpString.substring(0, 4)+"\n";
-	result += "Message identifier: "+inpString.substring(4, 6)+"\n";
-	result += "Data Coding Scheme: "+inpString.substring(8, 10)+explain_alphabet+"\n";
-	result += "Page Parameter: "+inpString.substring(10, 12)+"\n";
-
-	return result;
-}
-
-function decodeGSM7bitPacked(inpString, is_cell_broadcast)
-{
-	var result_prefix = "";
-
-	var NewString = "";
-	for(var i = 0; i < inpString.length;i++)
-		if (MakeNum(inpString.substr(i, 1)) != 16)
-			NewString += inpString.substr(i,1);
-	inpString = NewString;
-
-	var i = inpString.length;
-
-	if (i % 2)
-		return "ERROR: Length is not even";
-
-	if (is_cell_broadcast)
-	{
-		if (i < 14)
-			return "ERROR: Too short";
-
-		result_prefix += explain_cell_broadcast(inpString);
-
-		inpString = inpString.substring(12);
-		i = inpString.length;
-	}
-
-	var septets = Math.floor(i / 2 * 8 / 7);
-	var buffer = getUserMessage(0, inpString, septets);
-	var len = buffer.length;
-	var padding = String.fromCharCode(0x0D);
-	var info = "";
-
-	if ((septets % 8 == 0 && len > 0 && buffer.charAt(len -1) == padding) || (septets % 8 == 1 && len > 1 && buffer.charAt(len -1) == padding && buffer.charAt(len -2) == padding))
-	{
-		buffer = buffer.substring(0, len -1);
-		info = "<BR><SMALL>( Had padding which is removed )</SMALL>";
-	}
-
-	return '<B>USSD/User Data without length information</B>\nAlphabet: GSM 7bit\n'+result_prefix+'\n<BIG>'+buffer+"</BIG>\nLength: "+buffer.length+info;
-}
-
-function decode_ussdText(inpString, is_cell_broadcast)
-{
-	var elem = document.getElementById('pduTool').ussd;
-	var bitSize = elem[0].value * elem[0].checked | elem[1].value * elem[1].checked;
-
-	if (bitSize == 7)
-		return decodeGSM7bitPacked(inpString, is_cell_broadcast);
-
-	if (bitSize == 16)
-	{
-		var result_prefix = "";
-		var NewString = "";
-		for(var i = 0; i < inpString.length;i++)
-			if (MakeNum(inpString.substr(i, 1)) != 16)
-				NewString += inpString.substr(i,1);
-		inpString = NewString;
-
-		var i = inpString.length;
-
-		if (i % 2)
-			return "ERROR: Length is not even";
-
-		if (is_cell_broadcast)
-		{
-			if (i < 14)
-				return "ERROR: Too short";
-
-			result_prefix += explain_cell_broadcast(inpString);
-
-			inpString = inpString.substring(12);
-		}
-
-		var messagelength = inpString.length / 2;
-		var buffer = getUserMessage16(0, inpString, messagelength);
-		var info = "";		
-
-		return '<B>USSD/User Data without length information</B>\nAlphabet: UCS2\n'+result_prefix+'\n<BIG>'+buffer+"</BIG>\nLength: "+messagelength/2+info;
-	}
-
-	return "ERROR";
 }
 
 function explain_toa(octet)
@@ -1359,410 +1084,6 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 	
 	return out;
 }
-
-// function that print the default alphabet to a String
-function printDefaultAlphabet()
-{
-	var out = "";
-	out = "<table border=1 cellpadding=0 cellspacing=0";
-	out = out + "<TR><TD align=left> &nbsp;#&nbsp; </TD><TD align=center>&nbsp; <b>character</b>&nbsp;</TD><TD align=right> &nbsp;<b>ASCII Code</b>&nbsp; </TD><TD align=right> &nbsp;<b>bits</b>&nbsp; </TD><TD align=right> &nbsp;<b>HEX</b>&nbsp; </TD></TR>";
-	for(var i=0;i<sevenbitdefault.length;i++)
-	{
-		if (i == 27)
-			out = out +"<TR>"
-				+"<TD align=left> &nbsp;" +i +"&nbsp; </TD>"
-				+"<TD align=center> &nbsp;" +sevenbitdefault[i] +" esc" +"&nbsp; </TD>"
-				+"<TD align=right> &nbsp;" +i +"&nbsp; </TD>"
-				+"<TD align=right> &nbsp;" +intToBin(i,8) +"&nbsp; </TD>"
-				+"<TD align=right> &nbsp;" +i.toString(16) +"&nbsp; </TD>"
-				+"</TR>";
-		else
-			out = out +"<TR>"
-				+"<TD align=left> &nbsp;" +i +"&nbsp; </TD>"
-				+"<TD align=center> &nbsp;" +sevenbitdefault[i] +"&nbsp; </TD>"
-				+"<TD align=right> &nbsp;" +sevenbitdefault[i].charCodeAt(0) +"&nbsp; </TD>"
-				+"<TD align=right> &nbsp;" +intToBin(sevenbitdefault[i].charCodeAt(0),8) +"&nbsp; </TD>"
-				+"<TD align=right> &nbsp;" +sevenbitdefault[i].charCodeAt(0).toString(16) +"&nbsp; </TD>"
-				+"</TR>";
-		
-	}
-	out = out +"</table>";
-	return out;	
-} 
-
-// function to make a new window
-function show(title,text)
-{
-	myWin=open('','','width=500,height=600,resizable=no,location=no,directories=no,toolbar=no,status=no,scrollbars=yes');
-
-	var b='<html><head><title>'+title+'</title></head><body><center>'+ text +'</center></body></html>';
-	a=myWin.document;
-	a.open();
-	a.write(b);
-	a.close();
-}
-
-function stringToPDU(inpString,phoneNumber,smscNumber,size,mclass,to_toa,valid,receipt) // AJA fixed SMSC processing
-{
-	var bitSize = size[0].value * size[0].checked | size[1].value * size[1].checked | size[2].value * size[2].checked;
-
-	var octetFirst = "";
-	var octetSecond = ""; 
-	var output = "";
-
-	//Make header
-	var SMSC_INFO_LENGTH = 0;
-	var SMSC_LENGTH = 0;
-	var SMSC_NUMBER_FORMAT = "";
-	var SMSC = "";
-	if (smscNumber != 0)
-	{
-		SMSC_NUMBER_FORMAT = "81"; // national
-
-		if (smscNumber.substr(0,1) == '+')
-		{
-			SMSC_NUMBER_FORMAT = "91"; // international
-			smscNumber = smscNumber.substr(1);
-		}
-		else if (smscNumber.substr(0,1) !='0')
-		{
-			SMSC_NUMBER_FORMAT = "91"; // international
-		}
-
-		if(smscNumber.length%2 != 0)
-		{
-			// add trailing F
-			smscNumber += "F";
-		}	
-	
-		SMSC = semiOctetToString(smscNumber);
-		SMSC_INFO_LENGTH = ((SMSC_NUMBER_FORMAT + "" + SMSC).length)/2;
-		SMSC_LENGTH = SMSC_INFO_LENGTH;
-		
-	}
-	if(SMSC_INFO_LENGTH < 10)
-	{
-		SMSC_INFO_LENGTH = "0" + SMSC_INFO_LENGTH;
-	}
-	var firstOctet; // = "1100";
-
-	if (receipt.checked)
-	{
-		if (document.getElementById('pduTool').vFlag.checked)
-		{
-			firstOctet = "3100"; // 18 is mask for validity period // 10 indicates relative
-		}
-		else
-		{
-			firstOctet = "2100";
-		}
-	}
-	else
-	{
-		if (document.getElementById('pduTool').vFlag.checked)
-		{
-			firstOctet = "1100";
-		}
-		else
-		{
-			firstOctet = "0100";
-		}
-	}
-	
-	var REIVER_NUMBER_FORMAT = "81"; // (national) 81 is "unknown"
-	if (phoneNumber.substr(0,1) == '+')
-	{
-		REIVER_NUMBER_FORMAT = "91"; // international
-		phoneNumber = phoneNumber.substr(1); //,phoneNumber.length-1);
-	}
-	else if (phoneNumber.substr(0,1) !='0')
-	{
-		REIVER_NUMBER_FORMAT = "91"; // international
-	}
-
-	switch (to_toa)
-	{
-		case "145":
-			REIVER_NUMBER_FORMAT = "91"; // international
-			break;
-
-		case "161":
-			REIVER_NUMBER_FORMAT = "A1"; // national
-			break;
-
-		case "129":
-			REIVER_NUMBER_FORMAT = "81"; // unknown
-			break;
-	}
-
-	var REIVER_NUMBER_LENGTH = intToHex(phoneNumber.length);
-
-	if(phoneNumber.length%2 != 0)
-	{
-		// add trailing F
-		phoneNumber += "F";
-	}
-
-	var REIVER_NUMBER = semiOctetToString(phoneNumber);
-	var PROTO_ID = "00";
-	var DCS=0;
-	if (mclass != -1) // AJA
-	{
-		DCS = mclass | 0x10;
-	}
-	switch(bitSize)
-	{
-		case 7:
-			break;
-		case 8:
-			DCS = DCS | 4;
-			break;
-		case 16:
-			DCS = DCS | 8;
-			break;
-
-		default:
-			alert("Invalid Alphabet Size");
-			return "";
-	}
-
-	document.getElementById('ussdText').value = "";
-	document.getElementById('pduTool').cell_broadcast.checked = false;
-
-	var DATA_ENCODING = intToHex(DCS);
-//	var DATA_ENCODING = "00"; // Default
-//	if (bitSize == 8)
-//	{
-//		DATA_ENCODING = "04";
-//	}
-//	else if (bitSize == 16)
-//	{
-//		DATA_ENCODING = "08";
-//	}
-
-	var VALID_PERIOD = ""; // AA
-	if (document.getElementById('pduTool').vFlag.checked)
-	{
-		VALID_PERIOD = intToHex(valid); // AA
-	}
-
-	var userDataSize;
-	if (bitSize == 7)
-	{
-		var tmp = inpString;
-		var inpStr = "";
-
-		for (var i = 0; i < tmp.length; i++)
-		{
-			if (getSevenBitExt(tmp.charAt(i)))
-				inpStr += String.fromCharCode(0x1B);
-
-			inpStr += tmp.charAt(i);
-		}
-
-		inpStr = inpStr.substring(0, maxChars);
-
-		userDataSize = intToHex(inpStr.length);
-
-		for (var i = 0; i <= inpStr.length; i++)
-		{
-			if (i == inpStr.length)
-			{
-				if (octetSecond != "") // AJA Fix overshoot
-				{
-					output = output + "" + (intToHex(binToInt(octetSecond)));
-				}
-				break;
-			}
-
-			//var current = intToBin(getSevenBit(inpStr.charAt(i)),7);
-
-			if (inpStr.charAt(i) == String.fromCharCode(0x1B))
-				current = intToBin(0x1B,7);
-			else
-			{
-				tmp = getSevenBitExt(inpStr.charAt(i));
-				if (tmp == 0)
-					tmp = getSevenBit(inpStr.charAt(i));
-				else
-					tmp = getSevenBitExt(inpStr.charAt(i));
-
-				current = intToBin(tmp,7);
-			}
-
-			var currentOctet;
-			if(i!=0 && i%8!=0)
-			{
-				octetFirst = current.substring(7-(i)%8);
-				currentOctet = octetFirst + octetSecond;	//put octet parts together
-			
-				output = output + "" + (intToHex(binToInt(currentOctet)));
-				octetSecond = current.substring(0,7-(i)%8);	//set net second octet
-			}
-			else
-			{
-				octetSecond = current.substring(0,7-(i)%8);
-			}	
-		}
-
-		encodeGSM7bitPacked(inpString);
-	}
-	else if (bitSize == 8)
-	{
-		userDataSize = intToHex(inpString.length);
-
-		var CurrentByte = 0;
-		for(var i=0;i<inpString.length;i++)
-		{
-			CurrentByte = getEightBit(inpString.charCodeAt(i));
-			output = output + "" + ( ToHex( CurrentByte ) );
-		}
-	}
-	else if (bitSize == 16)
-	{
-		userDataSize = intToHex(inpString.length * 2);
-
-		var myChar=0;
-		var ussd = "";
-
-		for(var i=0;i<inpString.length;i++)
-		{
-			myChar = get16Bit( inpString.charCodeAt(i) );
-			output = output + "" + ( ToHex( (myChar&0xff00)>>8 )) + ( ToHex( myChar&0xff ) );
-			ussd += ( ToHex( (myChar&0xff00)>>8 )) + ( ToHex( myChar&0xff ) );
-		}
-
-		document.getElementById('ussdText').value = ussd;
-		change_ussd(16);
-	}
-
-	var header = SMSC_INFO_LENGTH + SMSC_NUMBER_FORMAT + SMSC + firstOctet + REIVER_NUMBER_LENGTH + REIVER_NUMBER_FORMAT  + REIVER_NUMBER +  PROTO_ID + DATA_ENCODING + VALID_PERIOD + userDataSize;
-
-	var PDU = header + output;
-
-	var AT = "AT+CMGS=" + (PDU.length/2 - SMSC_LENGTH - 1) ; // Add /2 for PDU length AJA - I think the SMSC information should also be excluded
-
-//	var bStep=18;
-//	for(var breakUp=1;breakUp*bStep < PDU.length;breakUp++)
-//	{
-//		PDU = PDU.substr(0,breakUp*bStep+breakUp-1) + " " + PDU.substr(breakUp*bStep+breakUp-1); 
-//	}
-
-	//CMGW
-	return AT + "\n" + PDU;
-}
-
-function countCharacters(elem)
-{
-	var size = document.getElementById('pduTool').size;
-	var bitSize = size[0].value * size[0].checked | size[1].value * size[1].checked | size[2].value * size[2].checked;
-	//var keysSoFar = elem.value.length;
-	var characters = 0;
-	var extented = 0;
-
-	if (bitSize == 7)
-	{
-		for (var i = 0; i < elem.value.length; i++)
-		{
-			if (getSevenBitExt(elem.value.charAt(i)))
-			{
-				extented++;
-				characters++;
-			}
-			characters++;
-		}
-	}
-	else
-		characters = elem.value.length;
-/*
-	if (characters > maxChars)
-	{
-		if (!alerted)
-		{
-			alert ('Max length '+ maxChars + '!');
-		}
-		elem.value = elem.value.substring (0, maxChars); //chop
-		alerted = true;
-		characters = maxChars;
-	}
-*/
-	//window.status = "Characters left : " + (maxChars - characters);
-	document.getElementById('counter').innerHTML = characters+" / "+maxChars;
-
-	var info = "<BR><SMALL>&nbsp;</SMALL>";
-	if (extented)
-		info = "<BR><SMALL>"+extented+" extended character(s).</SMALL>";
-
-	if (characters > maxChars)
-		document.getElementById('counter_notice').innerHTML = "<font color=red>Text is too long.</font>"+info;
-	else
-		document.getElementById('counter_notice').innerHTML = info;
-}
-
-function change_size(value)
-{
-	var elem = document.getElementById('pduTool').size;
-	var bitSize = elem[0].value * elem[0].checked | elem[1].value * elem[1].checked | elem[2].value * elem[2].checked;
-
-	if (value)
-	{
-		var len = elem.length;
-		for (var i = 0; i < len; i++)
-		{
-			elem[i].checked = false;
-			if (elem[i].value == "7")
-				elem[i].checked = true;
-		}
-		return;
-	}
-
-	switch (bitSize)
-	{
-		case 7:
-			maxChars = 160;
-			break;
-
-		case 8:
-			maxChars = 140;
-			break;
-
-		case 16:
-			maxChars = 70;
-			break;
-	}
-
-	countCharacters(document.getElementById('smsText'));
-}
-
-function change_ussd(value)
-{
-	var elem = document.getElementById('pduTool').ussd;
-
-	if (value)
-	{
-		var len = elem.length;
-		for (var i = 0; i < len; i++)
-		{
-			elem[i].checked = false;
-			if (elem[i].value == value)
-				elem[i].checked = true;
-		}
-	}
-
-	var bitSize = elem[0].value * elem[0].checked | elem[1].value * elem[1].checked;
-
-	switch (bitSize)
-	{
-		case 7:
-			document.getElementById('ussd_label').innerHTML = "<SMALL><i>( Padding as defined on GSM 03.38 version 5.6.1 (ETS 300 900) page 17 )</i></SMALL>";
-			break;
-
-		case 16:
-			document.getElementById('ussd_label').innerHTML = "";
-			break;
-	}
-}
-
 function DCS_Bits(tp_DCS)
 {
 	var AlphabetSize=7; // Set Default
@@ -1799,7 +1120,7 @@ function DCS_Bits(tp_DCS)
 					// 06.06.2017: if (pomDCS & 0x4)
 					if (!(pomDCS & 0x4))
 					{
-						;
+
 					}
 					else
 					{
@@ -1934,47 +1255,7 @@ function tpDCSMeaning(tp_DCS)
 	return(tp_DCS_desc); 
 }
 
-function checkFlag(valid)
-{
-	if (valid.checked)
-	{
-		document.getElementById('pduTool').valid.disabled = false;
-		document.getElementById('pduTool').valid.value = "255";
-		document.getElementById('validy').innerHTML=cValid("255");
-	}
-	else
-	{
-		document.getElementById('pduTool').valid.disabled = true;
-		document.getElementById('pduTool').valid.value = "";
-		document.getElementById('validy').innerHTML="";
-	}
-}
 
-function Validity(valid)
-{
-var byValidityPeriod = 0;
-
-	if (isNaN(parseInt(valid)))
-	{
-		valid = 0;
-		document.getElementById('pduTool').valid.value = valid;
-	}
-	else
-	{
-		valid=parseInt(valid);
-		if (valid <0)
-		{
-			valid = 0;
-			document.getElementById('pduTool').valid.value = valid;
-		}
-		if (valid>255)
-		{
-			valid = 255;
-			document.getElementById('pduTool').valid.value = valid;
-		}
-	}
-	return cValid(valid);
-}
 
 function cValid(valid)
 {
@@ -2034,42 +1315,6 @@ function cValid(valid)
 	return out;
 }
 
-
-
-function add_to_memo(val)
-{
-	var elem = document.getElementById('smsMemo');
-	var add = val;
-
-	add = add.replace(/<BR>/gi, '\n');
-	add = add.replace(/<BIG>/gi, '');
-	add = add.replace(/<\/BIG>/gi, '');
-	add = add.replace(/<B>/gi, '');
-	add = add.replace(/<\/B>/gi, '');
-	add = add.replace(/<SMALL>/gi, '');
-	add = add.replace(/<\/SMALL>/gi, '');
-
-	if (document.getElementById('pduTool').quote_memo.checked)
-	{
-		var memo = elem.value;
-		if (memo.length > 0)
-			if (memo.substring(0, 1) != "\n")
-				memo = "\n"+memo;
-
-		memo = memo.replace(/\n/g, '\n> ');
-		elem.value = add+memo;
-	}
-	else
-		elem.value += add;
-}
-
-function sizeMemo(val)
-{
-	//var elem = document.getElementById('smsMemo');
-	//elem.rows += val;
-
-	set_rows(0,val,'smsMemo');
-}
 const fs = require('fs');
 
 // Function to show usage information
