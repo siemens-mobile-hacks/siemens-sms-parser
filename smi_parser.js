@@ -823,7 +823,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 		var seconds = timeStamp.substring(10,12);
 		var timezone = timeStamp.substring(12,14);
 
-		timeStamp = day + "/" + month + "/" + year + " " + hours + ":" + minutes + ":" + seconds + " GMT " +decode_timezone(timezone);
+		timeStamp =  "20" + year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds + " GMT " +decode_timezone(timezone);
 
 		start +=14;
 

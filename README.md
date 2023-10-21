@@ -21,7 +21,7 @@ Receipt requested: no
 SMSC: 79184330000
 Sender: 79183232214
 TOA: 91 international, Numbering Plan: unknown
-TimeStamp: 29/04/05 11:20:10 GMT +03:00
+TimeStamp: 2005-04-29 11:20:10 GMT +03:00
 TP-PID: 00
 TP-DCS: 00
 TP-DCS-desc: Uncompressed Text, No class
