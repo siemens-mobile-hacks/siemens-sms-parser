@@ -1314,61 +1314,57 @@ function cValid(valid)
 
 	return out;
 }
+const fs = require('fs').promises;
+const path = require('path');
 
-const fs = require('fs');
+async function processFile(filePath) {
+    console.log(filePath);
+    const fd = await fs.open(filePath, 'r');
+    const stats = await fd.stat();
+    const bufferSize = stats.size - 18;
+    const buffer = Buffer.alloc(bufferSize);
+    await fd.read(buffer, 0, bufferSize, 18);
+    await fd.close();
 
-// Function to show usage information
-function showUsage() {
-    console.log("Usage: node <script_name> <file_name>");
-    console.log("Reads a file starting from byte 18 and processes its content.");
+    let hexString = buffer.toString('hex');
+    hexString = hexString.replace(/ff+$/, '');
+
+    console.log(getPDUMetaInfo(hexString, "\n", "Message:\n\n", "\n"));
 }
 
-// Get the file name from the command-line arguments
-const fileName = process.argv[2];
+async function readDirRecursively(dirPath) {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
-// If no file name provided, show usage and exit
-if (!fileName) {
-    console.error("Error: No file name provided.");
-    showUsage();
-    process.exit(1);
+    for (const dirent of entries) {
+        const entryPath = path.join(dirPath, dirent.name);
+
+        if (dirent.isDirectory()) {
+            await readDirRecursively(entryPath);
+        } else {
+            await processFile(entryPath);
+        }
+    }
 }
 
-// Read the file asynchronously starting from byte 18
-fs.open(fileName, 'r', (err, fd) => {
-    if (err) {
-        console.error(`Error opening file: ${err}`);
-        return;
+async function main() {
+    const inputPath = process.argv[2];
+
+    if (!inputPath) {
+        console.error("Error: No input path provided.");
+        console.log("Usage: node <script_name> <file_or_directory_name>");
+        process.exit(1);
     }
 
-    // Find the size of the file
-    fs.fstat(fd, (err, stats) => {
-        if (err) {
-            console.error(`Error getting file stats: ${err}`);
-            return;
-        }
+    const stats = await fs.stat(inputPath);
 
-        const bufferSize = stats.size - 18; // File size - 18 bytes
-        const buffer = Buffer.alloc(bufferSize);
+    if (stats.isDirectory()) {
+        await readDirRecursively(inputPath);
+    } else if (stats.isFile()) {
+        await processFile(inputPath);
+    } else {
+        console.error("Error: The input path is neither a file nor a directory.");
+        process.exit(1);
+    }
+}
 
-        // Read the file into the buffer starting at byte 18
-        fs.read(fd, buffer, 0, bufferSize, 18, (err, bytesRead, buffer) => {
-            if (err) {
-                console.error(`Error reading file: ${err}`);
-                return;
-            }
-
-            // Convert the buffer to hex and remove trailing FF bytes
-            let hexString = buffer.toString('hex');
-            hexString = hexString.replace(/ff+$/, '');
-
-            console.log(getPDUMetaInfo(hexString, "\n", "Message:\n\n", "\n"));
-
-            // Close the file descriptor
-            fs.close(fd, (err) => {
-                if (err) {
-                    console.error(`Error closing file: ${err}`);
-                }
-            });
-        });
-    });
-});
+main().catch(console.error);
