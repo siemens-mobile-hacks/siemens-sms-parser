@@ -369,23 +369,24 @@ function getUserMessage(skip_characters, input,truelength) // Add truelength AJA
 	return smsMessage;
 }
 
-function getUserMessage16(skip_characters, input,truelength)
-{
-	var smsMessage = "";
-	var char_counter = 0;
-	calculation = "Not implemented";
+function getUserMessage16(skipOctets, hex) {
+	// 1. strip UDHL + UDH      (2 hex chars per byte)
+	let payload = hex.slice(skipOctets * 2);
 
-	// Cut the input string into pieces of 4
-	for(var i=0;i<input.length;i=i+4)
-	{
-		var hex1 = input.substring(i,i+2);
-		var hex2 = input.substring(i+2,i+4);
-		char_counter++;
-		if (char_counter > skip_characters)
-			smsMessage += "" + String.fromCharCode(HexToNum(hex1)*256+HexToNum(hex2));
+	// 2. make the byte-count even (unicode ≡ 2-byte code units)
+	if (payload.length & 2) payload = payload.slice(0, -2);
+
+	// 3. decode big-endian UCS-2  → JS string
+	if (typeof TextDecoder === 'function') {
+		return new TextDecoder('utf-16be').decode(Buffer.from(payload, 'hex'));
 	}
-	
-	return smsMessage;
+	// fallback: manual big-endian read
+	const buf = Buffer.from(payload, 'hex');
+	let out = '';
+	for (let i = 0; i < buf.length; i += 2) {
+		out += String.fromCharCode((buf[i] << 8) | buf[i + 1]);
+	}
+	return out;
 }
 
 function getUserMessage8(skip_characters, input,truelength)
@@ -670,19 +671,23 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 		var bitSize = DCS_Bits(tp_DCS);
 	    	var userData = "Undefined format";
 		var skip_characters = 0;
+		let skip_octets = 0;          // how many *bytes* to ignore in the payload
 
 		if ((bitSize == 7 || bitSize == 16) && UserDataHeader)
 		{
-			var ud_len = HexToNum(PDUString.substr(start,2));
+			const ud_len = HexToNum(PDUString.substr(start, 2));   // bytes after UDHL
+			UserDataHeader = '';
 
-			UserDataHeader = "";
-			for (var i = 0; i <= ud_len; i++)
-				UserDataHeader += PDUString.substr(start +i *2, 2) +" ";
+			for (let i = 0; i <= ud_len; i++)                      // display purposes only
+				UserDataHeader += PDUString.substr(start + i * 2, 2) + ' ';
 
-			if (bitSize == 7)
-				skip_characters = (((ud_len + 1) * 8) + 6) / 7;
-			else
-				skip_characters = (ud_len +1) /2;
+			skip_octets = ud_len + 1;                              // UDHL byte + UDH itself
+
+			if (bitSize === 7) {
+				skip_characters = Math.ceil(((ud_len + 1) * 8) / 7);
+			} else {
+				skip_characters = (ud_len + 1) / 2;
+			}
 		}
 
 		if (bitSize==7)
@@ -704,7 +709,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 		}
 		else if (bitSize==16)
 		{
-			userData = getUserMessage16(skip_characters, PDUString.substr(start,PDUString.length-start),messageLength);
+			userData = getUserMessage16(skip_octets, PDUString.substr(start));
 		}
 
 		userData = userData.substr(0,messageLength);
@@ -834,6 +839,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 		var bitSize = DCS_Bits(tp_DCS);
 		var userData = "Undefined format";
 		var skip_characters = 0;
+		const skip_octets = UserDataHeader ? ud_len + 1 : 0;   // UDHL byte + UDH bytes
 
 		if ((bitSize == 7 || bitSize == 16) && UserDataHeader)
 		{
@@ -868,7 +874,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 		}
 		else if (bitSize==16)
 		{
-			userData = getUserMessage16(skip_characters, PDUString.substr(start,PDUString.length-start),messageLength);
+			userData = getUserMessage16(skip_octets, PDUString.substr(start));
 		}
 
 		userData = userData.substr(0,messageLength);
