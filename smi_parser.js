@@ -595,7 +595,7 @@ function getPDUMetaInfo(inp, linefeed, ud_start, ud_end)
 
 	if ((HexToNum(firstOctet_SMSDeliver) & 0x03) == 1 || (HexToNum(firstOctet_SMSDeliver) & 0x03) == 3) // Transmit Message
 	{
-		out = "<B>SMS SUBMIT (send)</B>"+linefeed;
+		out = linefeed;
 
 		if ((HexToNum(firstOctet_SMSDeliver) & 0x03) == 3)
 		{
