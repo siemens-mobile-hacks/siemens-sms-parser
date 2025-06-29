@@ -98,65 +98,9 @@ const SmsStatuses = Object.freeze({
     DELIVERED: 0,
     UNDELIVERED: 1,
 })
-class SMSDecoder {
-    #dataAsHex = '';
-    #format;
-    #idx = 0;
-    #smsPartsTotal = 0;
-    #smsPartsStored = 0;
-    #smsType;
-    #smsStatus;
-    #timestamp;
-    #segmentStatus;
-    #smsCLength;
-    #smsCType;
-    #smsCAddress;
-    #pduStart;
-
-
-    decode(bufOrHex) {
-        if (bufOrHex.length <= 5) throw new Error(`File too short`);
-        this.#idx = 0;
-        this.#dataAsHex = _asStr(bufOrHex);
-        let signature = this.#takeHex(5);
-        for (const [formatName, formatSignature] of Object.entries(FileFormats)) {
-            if (signature === formatSignature.signature) {
-                this.#format = formatName;
-                break;
-            }
-        }
-        if (this.#format === undefined) throw new Error(`Unknown file format. First 5 bytes: ${signature}`);
-        const formatObject = FileFormats[this.#format];
-        if (formatObject.hasOwnProperty('smsPartsOffset')) {
-            this.#smsPartsTotal = this.#takeInt(1);
-            this.#smsPartsStored = this.#takeInt(1);
-        }
-        if (formatObject.hasOwnProperty('smsTypeOffset')) {
-            this.#smsType = this.#takeInt(1);
-        }
-        if (formatObject.hasOwnProperty('smsStatusOffset')) {
-            this.#smsStatus = this.#takeInt(1);
-        }
-        if (formatObject.hasOwnProperty('timestampOffset')) {
-            this.#timestamp = this.#takeInt(7);
-        }
-        if (formatObject.segmentStatusOffset - formatObject.timestampOffset > 7) {
-            this.#takeInt(formatObject.segmentStatusOffset - formatObject.timestampOffset  - 7); //waste byte
-        }
-        if (formatObject.hasOwnProperty('segmentStatusOffset')) {
-            this.#segmentStatus = this.#takeInt(1);
-        }
-
-        this.#smsCLength = this.#takeInt(1);
-        this.#smsCType = this.#takeInt(1);
-        const smsCAddressHex = this.#takeHex(this.#smsCLength  -1);
-        this.#smsCAddress = semiPhone(smsCAddressHex);
-        this.#pduStart = this.#idx;
-        const fo = this.#takeInt(1), mt = fo & 3, udhi = !!(fo & 0x40);
-        if (mt === 2) return this.#statusReport({smscNum, smscToa});
-        return this.#deliverOrSubmit({fo, mt, udhi});
-    }
-
+class PDUDecoder {
+    #dataAsHex;
+    #idx;
     #takeHex = n => {
         const s = this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
         this.#idx += n;
@@ -175,7 +119,6 @@ class SMSDecoder {
         const ra = semiPhone(this.#takeHex(Math.ceil(raLen / 2)));
         const ts = this.#readTS(), dts = this.#readTS(), st = this.#takeInt(1);
         return {
-            smscNum: this.#smsCAddress,
             type: 'STATUS_REPORT',
             messageRef: mr,
             recipient: ra,
@@ -236,15 +179,13 @@ class SMSDecoder {
         }
 
         const common = {
-            smscNum: this.#smsCAddress,
             firstOctet: meta.fo,
             hasUdh: meta.udhi,
-            format: this.#format,
             pid,
             dcs,
             classDesc: (dcs & 0x10) ? `class ${dcs & 3}` : '',
             udh,
-            length: bits === 16 ? udl / 2 : udl,
+            length: bits === 16 ? (udl-skipOct) / 2 : (udl-skipOct),
             text,
             encoding,
         };
@@ -283,12 +224,100 @@ class SMSDecoder {
         const buf = Buffer.from(hex.slice(skipOct * 2, skipOct * 2 + udl * 2), 'hex');
         return [...buf].map(c => String.fromCharCode(c)).join('');
     }
+    decode(bufOrHex) {
+        this.#dataAsHex = bufOrHex;
+        this.#idx = 0;
+        const fo = this.#takeInt(1), mt = fo & 3, udhi = !!(fo & 0x40);
+        if (mt === 2) return this.#statusReport();
+
+        return this.#deliverOrSubmit({fo, mt, udhi});
+    }
+}
+class SMSDecoder {
+    #dataAsHex = '';
+    #format;
+    #idx = 0;
+    #smsPartsTotal = 0;
+    #smsPartsStored = 0;
+    #smsType;
+    #smsStatus;
+    #timestamp;
+    #segmentStatus;
+    #smsCLength;
+    #smsCType;
+    #smsCAddress;
+    #pduStart;
+
+
+    decode(bufOrHex) {
+        if (bufOrHex.length <= 5) throw new Error(`File too short`);
+        this.#idx = 0;
+        this.#dataAsHex = _asStr(bufOrHex);
+        let signature = this.#takeHex(5);
+        for (const [formatName, formatSignature] of Object.entries(FileFormats)) {
+            if (signature === formatSignature.signature) {
+                this.#format = formatName;
+                break;
+            }
+        }
+        if (this.#format === undefined) throw new Error(`Unknown file format. First 5 bytes: ${signature}`);
+        const formatObject = FileFormats[this.#format];
+        if (formatObject.hasOwnProperty('smsPartsOffset')) {
+            this.#smsPartsTotal = this.#takeInt(1);
+            this.#smsPartsStored = this.#takeInt(1);
+        }
+        if (formatObject.hasOwnProperty('smsTypeOffset')) {
+            this.#smsType = this.#takeInt(1);
+        }
+        if (formatObject.hasOwnProperty('smsStatusOffset')) {
+            this.#smsStatus = this.#takeInt(1);
+        }
+        if (formatObject.hasOwnProperty('timestampOffset')) {
+            this.#timestamp = this.#takeInt(7);
+        }
+        if (formatObject.segmentStatusOffset - formatObject.timestampOffset > 7) {
+            this.#takeInt(formatObject.segmentStatusOffset - formatObject.timestampOffset  - 7); //waste byte
+        }
+        let parsingResult;
+        for (let smsPartId=0; smsPartId<this.#smsPartsTotal; smsPartId++) {
+            if (formatObject.hasOwnProperty('segmentStatusOffset')) {
+                this.#segmentStatus = this.#takeInt(1);
+            }
+
+            this.#smsCLength = this.#takeInt(1);
+            this.#smsCType = this.#takeInt(1);
+            const smsCAddressHex = this.#takeHex(this.#smsCLength - 1);
+            this.#smsCAddress = semiPhone(smsCAddressHex);
+            let pdu = this.#takeHex(167)
+            pdu = pdu.replace(/ff+$/i, '')
+            let decodedPdu = new PDUDecoder().decode(pdu);
+            if (parsingResult === undefined) {
+                parsingResult = decodedPdu;
+                parsingResult.format = this.#format;
+                parsingResult.smsCenterNumber = this.#smsCAddress;
+                parsingResult.smsPartsStored = this.#smsPartsStored;
+                parsingResult.smsPartsTotal  = this.#smsPartsTotal;
+            } else {
+                parsingResult.text += decodedPdu.text;
+                parsingResult.length += decodedPdu.length;
+            }
+        }
+        return parsingResult;
+    }
+
+    #takeHex = n => {
+        const s = this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
+        this.#idx += n;
+        return s;
+    }
+    #takeInt = n => hexToInt(this.#takeHex(n));
 }
 
 function formatOutput(decoded) {
     let output = '';
     output += `Format: ${decoded.format}\n`;
-    output += `SMS Center: ${decoded.smscNum}\n`;
+    output += `Parts: ${decoded.smsPartsStored}/${decoded.smsPartsTotal}\n`;
+    output += `SMS Center: ${decoded.smsCenterNumber}\n`;
     output += `Type: ${decoded.type}\n`;
     output += `Recipient: ${decoded.recipient}\n`;
     output += `Encoding: ${decoded.encoding}\n`;
@@ -307,7 +336,7 @@ async function processFile(file) {
         const decoded = new SMSDecoder().decode(raw);
         console.log(formatOutput(decoded));
     } catch (e) {
-        console.log(`ERROR: {e.message}`);
+        console.log(`ERROR: ${e.message}`);
     }
 }
 
