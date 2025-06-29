@@ -8,6 +8,15 @@ import {join, resolve} from 'node:path';
 const HEX = '0123456789ABCDEF';
 const toHex = n => HEX[(n >> 4) & 0x0F] + HEX[n & 0x0F];
 const hexToInt = h => parseInt(h, 16);
+const intToOctets = (integer) => {
+    const bytes = [];
+    for (let i = 0; i < 4; i++) {
+        // Right shift the integer to get the next byte
+        // 0xff (255) is used as a mask to get the last 8 bits (octet)
+        bytes.push((integer >> (i * 8)) & 0xff);
+    }
+    return new Uint8Array(bytes);
+};
 const _asStr = v => Buffer.isBuffer(v) ? v.toString('hex') : String(v);
 const swapSemi = hex => _asStr(hex).replace(/../g, p => p[1] + p[0]);
 
@@ -49,23 +58,107 @@ const EXT = new Map([
 ]);
 
 /* ────────── DECODER CLASS ───────────────────────────────────────────── */
-
+const FileFormats = Object.freeze({
+    //per https://sisms.sourceforge.net/docs/SMISMOStruct.html
+    'SL4x': { //Version 0
+        signature: '0b0b000000',
+        segmentStatusOffset: 5,
+        smsCOffset: 5+1,
+    },
+    'X55_ME45': { //Version 1
+        signature: '0b0b010100',
+        smsPartsOffset: 5,
+        smsTypeOffset: 5+2,
+        smsStatusOffset: 5+2+1,
+        timestampOffset: 5+2+1+1,
+        segmentStatusOffset: 5+2+1+1+7,
+        smsCOffset: 5+2+1+1+7+1,
+    },
+    'X55_X65_X75':{ //Version 2
+        signature: '0b0b020c00',
+        smsPartsOffset: 5,
+        smsTypeOffset: 5+2,
+        smsStatusOffset: 5+2+1,
+        timestampOffset: 5+2+1+1,
+        segmentStatusOffset: 5+2+1+1+1+7,
+        smsCOffset: 5+2+1+1+1+7+1,
+    },
+});
+const SmsTypes = Object.freeze({
+    DELIVER: 0,
+    SUBMIT: 3,
+})
+const SegmentStatuses = Object.freeze({
+    INCOMING_READ: 1,
+    INCOMING_UNREAD: 3,
+    OUTGOING_SENT: 5,
+    OUTGOING_UNSENT: 7,
+});
+const SmsStatuses = Object.freeze({
+    DELIVERED: 0,
+    UNDELIVERED: 1,
+})
 class SMSDecoder {
-    #hex = '';
+    #dataAsHex = '';
+    #format;
     #idx = 0;
+    #smsPartsTotal = 0;
+    #smsPartsStored = 0;
+    #smsType;
+    #smsStatus;
+    #timestamp;
+    #segmentStatus;
+    #smsCLength;
+    #smsCType;
+    #smsCAddress;
+    #pduStart;
+
 
     decode(bufOrHex) {
-        this.#hex = _asStr(bufOrHex).replace(/ff+$/i, '');
+        if (bufOrHex.length <= 5) throw new Error(`File too short`);
         this.#idx = 0;
-        const smscLen = this.#takeInt(1), smscInfo = this.#takeHex(smscLen);
-        const smscToa = smscInfo.slice(0, 2), smscNum = smscLen ? semiPhone(smscInfo.slice(2)) : '';
+        this.#dataAsHex = _asStr(bufOrHex);
+        let signature = this.#takeHex(5);
+        for (const [formatName, formatSignature] of Object.entries(FileFormats)) {
+            if (signature === formatSignature.signature) {
+                this.#format = formatName;
+                break;
+            }
+        }
+        if (this.#format === undefined) throw new Error(`Unknown file format. First 5 bytes: ${signature}`);
+        const formatObject = FileFormats[this.#format];
+        if (formatObject.hasOwnProperty('smsPartsOffset')) {
+            this.#smsPartsTotal = this.#takeInt(1);
+            this.#smsPartsStored = this.#takeInt(1);
+        }
+        if (formatObject.hasOwnProperty('smsTypeOffset')) {
+            this.#smsType = this.#takeInt(1);
+        }
+        if (formatObject.hasOwnProperty('smsStatusOffset')) {
+            this.#smsStatus = this.#takeInt(1);
+        }
+        if (formatObject.hasOwnProperty('timestampOffset')) {
+            this.#timestamp = this.#takeInt(7);
+        }
+        if (formatObject.segmentStatusOffset - formatObject.timestampOffset > 7) {
+            this.#takeInt(formatObject.segmentStatusOffset - formatObject.timestampOffset  - 7); //waste byte
+        }
+        if (formatObject.hasOwnProperty('segmentStatusOffset')) {
+            this.#segmentStatus = this.#takeInt(1);
+        }
+
+        this.#smsCLength = this.#takeInt(1);
+        this.#smsCType = this.#takeInt(1);
+        const smsCAddressHex = this.#takeHex(this.#smsCLength  -1);
+        this.#smsCAddress = semiPhone(smsCAddressHex);
+        this.#pduStart = this.#idx;
         const fo = this.#takeInt(1), mt = fo & 3, udhi = !!(fo & 0x40);
         if (mt === 2) return this.#statusReport({smscNum, smscToa});
-        return this.#deliverOrSubmit({smscNum, smscToa, fo, mt, udhi});
+        return this.#deliverOrSubmit({fo, mt, udhi});
     }
 
     #takeHex = n => {
-        const s = this.#hex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
+        const s = this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
         this.#idx += n;
         return s;
     }
@@ -82,8 +175,7 @@ class SMSDecoder {
         const ra = semiPhone(this.#takeHex(Math.ceil(raLen / 2)));
         const ts = this.#readTS(), dts = this.#readTS(), st = this.#takeInt(1);
         return {
-            smscNum: meta.smscNum,
-            smscToa: toHex(hexToInt(meta.smscToa)),
+            smscNum: this.#smsCAddress,
             type: 'STATUS_REPORT',
             messageRef: mr,
             recipient: ra,
@@ -116,12 +208,12 @@ class SMSDecoder {
         let skipOct = 0, skipChr = 0, udh = '';
         if (meta.udhi) {
             const udhl = this.#takeInt(1);
-            udh = this.#hex.slice(udStart * 2, (udStart + udhl + 1) * 2);
+            udh = this.#dataAsHex.slice(udStart * 2, (udStart + udhl + 1) * 2);
             skipOct = udhl + 1;
             const bits = this.#alphaBits(dcs);
             skipChr = bits === 16 ? skipOct / 2 : bits === 8 ? skipOct : Math.ceil(skipOct * 8 / 7);
         }
-        const bits = this.#alphaBits(dcs), bodyHx = this.#hex.slice(udStart * 2);
+        const bits = this.#alphaBits(dcs), bodyHx = this.#dataAsHex.slice(udStart * 2);
         let encoding, text;
         switch (bits) {
             case 16: {
@@ -144,10 +236,10 @@ class SMSDecoder {
         }
 
         const common = {
-            smscNum: meta.smscNum,
-            smscToa: toHex(hexToInt(meta.smscToa)),
+            smscNum: this.#smsCAddress,
             firstOctet: meta.fo,
             hasUdh: meta.udhi,
+            format: this.#format,
             pid,
             dcs,
             classDesc: (dcs & 0x10) ? `class ${dcs & 3}` : '',
@@ -195,6 +287,7 @@ class SMSDecoder {
 
 function formatOutput(decoded) {
     let output = '';
+    output += `Format: ${decoded.format}\n`;
     output += `SMS Center: ${decoded.smscNum}\n`;
     output += `Type: ${decoded.type}\n`;
     output += `Recipient: ${decoded.recipient}\n`;
@@ -209,13 +302,12 @@ function formatOutput(decoded) {
 
 async function processFile(file) {
     const raw = await fs.readFile(file);
-    const data = raw.length > 18 ? raw.subarray(18) : raw;   // Siemens .smo header
+    console.log(`--- ${file} ---`);
     try {
-        const decoded = new SMSDecoder().decode(data);
-        console.log(`--- ${file} ---`);
+        const decoded = new SMSDecoder().decode(raw);
         console.log(formatOutput(decoded));
     } catch (e) {
-        console.error(`\nERR  ${file}\n`, e);
+        console.log(`ERROR: {e.message}`);
     }
 }
 
