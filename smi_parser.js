@@ -1,4 +1,3 @@
-
 /* ────────── GENERIC HELPERS ─────────────────────────────────────────── */
 
 const HEX = '0123456789ABCDEF';
@@ -13,7 +12,9 @@ const intToOctets = (integer) => {
     }
     return new Uint8Array(bytes);
 };
-const _asStr = v => Buffer.isBuffer(v) ? v.toString('hex') : String(v);
+const bytesToHex = bytes => [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+const hexToBytes = hex => Uint8Array.from(hex.match(/../g).map(h => parseInt(h, 16)));
+const _asStr = v => v instanceof Uint8Array ? bytesToHex(v) : String(v);
 const swapSemi = hex => _asStr(hex).replace(/../g, p => p[1] + p[0]);
 
 const phoneMap = c => /[0-9]/.test(c) ? c : ({'*': 'A', '#': 'B', 'A': 'C', 'B': 'D', 'C': 'E'})[c] ?? 'F';
@@ -21,11 +22,12 @@ const semiPhone = hex => {
     const s = swapSemi(hex).split('').map(phoneMap).join('');
     return s.endsWith('F') ? s.slice(0, -1) : s;
 };
-const decodeTimestamp = ts =>{
+const decodeTimestamp = ts => {
     if (ts === '00000000000000') return undefined;
     let parts = swapSemi(ts).match(/../g);
     return parts ? `20${parts[0]}-${parts[1]}-${parts[2]} ${parts[3]}:${parts[4]}:${parts[5]} ${tzDecode(parts[6])}` : 'invalid-ts';
 }
+
 function tzDecode(tzHex = '') {
     if (tzHex.length < 2) return '+00:00';
     let tz = hexToInt(tzHex[0]);
@@ -41,6 +43,7 @@ function trimTrailingFFs(hex) {
     // Remove pairs of 'ff' from the end, leaving any unpaired 'f'.
     return s.replace(/(?:ff)+$/gi, '');
 }
+
 /* ────────── 7-bit ALPHABET TABLES ───────────────────────────────────── */
 
 const DEF = [
@@ -68,25 +71,25 @@ const FileFormats = Object.freeze({
     'SL4x': { //Version 0
         signature: '0b0b000000',
         segmentStatusOffset: 5,
-        smsCOffset: 5+1,
+        smsCOffset: 5 + 1,
     },
     'X55_ME45': { //Version 1
         signature: '0b0b010100',
         smsPartsOffset: 5,
-        smsTypeOffset: 5+2,
-        smsStatusOffset: 5+2+1,
-        timestampOffset: 5+2+1+1,
-        segmentStatusOffset: 5+2+1+1+7,
-        smsCOffset: 5+2+1+1+7+1,
+        smsTypeOffset: 5 + 2,
+        smsStatusOffset: 5 + 2 + 1,
+        timestampOffset: 5 + 2 + 1 + 1,
+        segmentStatusOffset: 5 + 2 + 1 + 1 + 7,
+        smsCOffset: 5 + 2 + 1 + 1 + 7 + 1,
     },
-    'X55_X65_X75':{ //Version 2
+    'X55_X65_X75': { //Version 2
         signature: '0b0b020c00',
         smsPartsOffset: 5,
-        smsTypeOffset: 5+2,
-        smsStatusOffset: 5+2+1,
-        timestampOffset: 5+2+1+1,
-        segmentStatusOffset: 5+2+1+1+1+7,
-        smsCOffset: 5+2+1+1+1+7+1,
+        smsTypeOffset: 5 + 2,
+        smsStatusOffset: 5 + 2 + 1,
+        timestampOffset: 5 + 2 + 1 + 1,
+        segmentStatusOffset: 5 + 2 + 1 + 1 + 1 + 7,
+        smsCOffset: 5 + 2 + 1 + 1 + 1 + 7 + 1,
     },
 });
 const SmsTypes = Object.freeze({
@@ -103,6 +106,7 @@ const SmsStatuses = Object.freeze({
     DELIVERED: 0,
     UNDELIVERED: 1,
 })
+
 class PDUDecoder {
     #dataAsHex;
     #idx;
@@ -170,7 +174,8 @@ class PDUDecoder {
             case 8: {
                 encoding = 'ASCII';
                 text = this.#octet(bodyHx, skipOct, udl);
-            } break;
+            }
+                break;
             case 7: {
                 encoding = 'GSM-7';
                 text = this.#seven(bodyHx, skipChr, udl);
@@ -188,7 +193,7 @@ class PDUDecoder {
             dcs,
             classDesc: (dcs & 0x10) ? `class ${dcs & 3}` : '',
             udh,
-            length: bits === 16 ? (udl-skipOct) / 2 : (udl-skipOct),
+            length: bits === 16 ? (udl - skipOct) / 2 : (udl - skipOct),
             text,
             encoding,
         };
@@ -219,13 +224,13 @@ class PDUDecoder {
     }
 
     #ucs2(hex, skipOct, udl) {
-        const slice = hex.slice(skipOct * 2, skipOct * 2 + udl * 2);
-        return new TextDecoder('utf-16be').decode(Buffer.from(slice, 'hex'));
+        const sliceBytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
+        return new TextDecoder('utf-16be').decode(sliceBytes);
     }
 
     #octet(hex, skipOct, udl) {
-        const buf = Buffer.from(hex.slice(skipOct * 2, skipOct * 2 + udl * 2), 'hex');
-        return [...buf].map(c => String.fromCharCode(c)).join('');
+        const bytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
+        return [...bytes].map(c => String.fromCharCode(c)).join('');
     }
     decode(bufOrHex) {
         this.#dataAsHex = bufOrHex;
@@ -236,6 +241,7 @@ class PDUDecoder {
         return this.#deliverOrSubmit({fo, mt, udhi});
     }
 }
+
 export class SMSDecoder {
     #dataAsHex = '';
     #format;
@@ -277,10 +283,10 @@ export class SMSDecoder {
             this.#timestamp = decodeTimestamp(this.#takeHex(7));
         }
         if (formatObject.segmentStatusOffset - formatObject.timestampOffset > 7) {
-            this.#takeInt(formatObject.segmentStatusOffset - formatObject.timestampOffset  - 7); //waste byte
+            this.#takeInt(formatObject.segmentStatusOffset - formatObject.timestampOffset - 7); //waste byte
         }
         let parsingResult;
-        for (let smsPartId=0; smsPartId<this.#smsPartsTotal; smsPartId++) {
+        for (let smsPartId = 0; smsPartId < this.#smsPartsTotal; smsPartId++) {
             if (formatObject.hasOwnProperty('segmentStatusOffset')) {
                 this.#segmentStatus = this.#takeInt(1);
             }
@@ -289,7 +295,7 @@ export class SMSDecoder {
             this.#smsCType = this.#takeInt(1);
             const smsCAddressHex = this.#takeHex(this.#smsCLength - 1);
             this.#smsCAddress = semiPhone(smsCAddressHex);
-            let pdu = this.#takeHex(176-this.#smsCLength-2);
+            let pdu = this.#takeHex(176 - this.#smsCLength - 2);
             pdu = trimTrailingFFs(pdu)
             let decodedPdu = new PDUDecoder().decode(pdu);
             if (parsingResult === undefined) {
@@ -297,7 +303,7 @@ export class SMSDecoder {
                 parsingResult.format = this.#format;
                 parsingResult.smsCenterNumber = this.#smsCAddress;
                 parsingResult.smsPartsStored = this.#smsPartsStored;
-                parsingResult.smsPartsTotal  = this.#smsPartsTotal;
+                parsingResult.smsPartsTotal = this.#smsPartsTotal;
                 if (this.#timestamp !== undefined) parsingResult.timestamp = this.#timestamp;
             } else {
                 parsingResult.text += decodedPdu.text;
