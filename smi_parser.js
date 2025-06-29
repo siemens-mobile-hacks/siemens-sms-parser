@@ -331,7 +331,6 @@ function formatOutput(decoded) {
 
 async function processFile(file) {
     const raw = await fs.readFile(file);
-    console.log(`--- ${file} ---`);
     try {
         const decoded = new SMSDecoder().decode(raw);
         console.log(formatOutput(decoded));
@@ -341,10 +340,15 @@ async function processFile(file) {
 }
 
 async function walk(p) {
-    const st = await fs.stat(p);
-    if (st.isDirectory()) {
+    const stat = await fs.stat(p);
+    if (stat.isDirectory()) {
         for (const f of await fs.readdir(p)) await walk(join(p, f));
-    } else if (st.isFile()) {
+    } else if (stat.isFile()) {
+        console.log(`--- ${p} ---`);
+        if (stat.size > 128*1024) {
+            console.error(`ERROR: File too large: ${p}`);
+            return;
+        }
         await processFile(p);
     }
 }
