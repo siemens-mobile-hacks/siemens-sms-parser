@@ -192,8 +192,8 @@ class PDUDecoder {
         };
 
         return meta.mt === 0
-            ? {...common, type: 'DELIVER', sender: phone, timestamp}
-            : {...common, type: 'SUBMIT', recipient: phone, messageRef: mr, timestamp}; // timestamp may be ''
+            ? {...common, type: 'Incoming', sender: phone, timestamp}
+            : {...common, type: 'Outgoing', recipient: phone, messageRef: mr, timestamp}; // timestamp may be ''
     }
 
     #alphaBits = d => ((d & 0xC0) === 0 ? ((d & 0x0C) === 8 ? 16 : (d & 0x0C) === 4 ? 8 : 7) : ((d & 0xC0) === 0xC0 ? ((d & 0x30) === 0x20 ? 16 : (d & 0x30) === 0x30 ? 8 : 7) : 7));
