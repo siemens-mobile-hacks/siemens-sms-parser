@@ -122,7 +122,26 @@ class SMSDecoder {
             skipChr = bits === 16 ? skipOct / 2 : bits === 8 ? skipOct : Math.ceil(skipOct * 8 / 7);
         }
         const bits = this.#alphaBits(dcs), bodyHx = this.#hex.slice(udStart * 2);
-        const text = bits === 16 ? this.#ucs2(bodyHx, skipOct, udl) : bits === 8 ? this.#octet(bodyHx, skipOct, udl) : this.#seven(bodyHx, skipChr, udl);
+        let encoding, text;
+        switch (bits) {
+            case 16: {
+                encoding = 'UCS-2';
+                text = this.#ucs2(bodyHx, skipOct, udl);
+                break;
+            }
+            case 8: {
+                encoding = 'ASCII';
+                text = this.#octet(bodyHx, skipOct, udl);
+            } break;
+            case 7: {
+                encoding = 'GSM-7';
+                text = this.#seven(bodyHx, skipChr, udl);
+                break;
+            }
+            default: {
+                throw new Error(`Unknown number of bits: ${bits}`);
+            }
+        }
 
         const common = {
             smscNum: meta.smscNum,
@@ -134,7 +153,8 @@ class SMSDecoder {
             classDesc: (dcs & 0x10) ? `class ${dcs & 3}` : '',
             udh,
             length: bits === 16 ? udl / 2 : udl,
-            text
+            text,
+            encoding,
         };
 
         return meta.mt === 0
@@ -178,6 +198,7 @@ function formatOutput(decoded) {
     output += `SMS Center: ${decoded.smscNum}\n`;
     output += `Type: ${decoded.type}\n`;
     output += `Recipient: ${decoded.recipient}\n`;
+    output += `Encoding: ${decoded.encoding}\n`;
     output += `Length: ${decoded.length}\n`;
     output += `Text: ${decoded.text}\n`;
 
