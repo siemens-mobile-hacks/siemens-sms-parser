@@ -316,11 +316,12 @@ class SMSDecoder {
 function formatOutput(decoded) {
     let output = '';
     output += `Format: ${decoded.format}\n`;
-    output += `Parts: ${decoded.smsPartsStored}/${decoded.smsPartsTotal}\n`;
-    output += `SMS Center: ${decoded.smsCenterNumber}\n`;
-    if (decoded.timestamp !== undefined) output += `Timestamp: ${decoded.timestamp}\n`;
     output += `Type: ${decoded.type}\n`;
-    output += `Recipient: ${decoded.recipient}\n`;
+    output += `Segments: ${decoded.smsPartsStored}/${decoded.smsPartsTotal}\n`;
+    if (decoded.timestamp !== undefined) output += `Date: ${decoded.timestamp}\n`;
+    output += `SMS Center: ${decoded.smsCenterNumber}\n`;
+    if (decoded.recipient !== undefined) output += `Recipient: ${decoded.recipient}\n`;
+    if (decoded.sender !== undefined) output += `Sender: ${decoded.sender}\n`;
     output += `Encoding: ${decoded.encoding}\n`;
     output += `Length: ${decoded.length}\n`;
     output += `Text: ${decoded.text}\n`;
