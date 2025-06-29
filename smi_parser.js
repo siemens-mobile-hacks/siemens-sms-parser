@@ -288,7 +288,7 @@ class SMSDecoder {
             this.#smsCType = this.#takeInt(1);
             const smsCAddressHex = this.#takeHex(this.#smsCLength - 1);
             this.#smsCAddress = semiPhone(smsCAddressHex);
-            let pdu = this.#takeHex(167)
+            let pdu = this.#takeHex(176-this.#smsCLength-2);
             pdu = pdu.replace(/ff+$/i, '')
             let decodedPdu = new PDUDecoder().decode(pdu);
             if (parsingResult === undefined) {
