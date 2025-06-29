@@ -2,7 +2,13 @@
 
 Parse SMI/SMO messages from "SMS archive" on Siemens phones.
 
-# Usage
+# Web usage
+
+`npx serve .`
+
+![](demo.png)
+
+# CLI Usage
 
     node cli.js "path/to/SMS Archive"
 
@@ -13,7 +19,7 @@ or
 Sample output:
 ```
 
---- /home/user/SMS archive/SMS archive/Inbox/Офис/29.04.smi ---
+--- /home/user/SMS archive/Inbox/Офис/29.04.smi ---
 Format: X55_X65_X75
 Type: Incoming
 Segments: 1/1
@@ -27,4 +33,5 @@ Text: PRIVET! U NAS EST' KARTA ROSSII V JPG? OCHEN' SROCHNO NUGNO! ESLI NET, TO 
 
 ````
 Format description: https://sisms.sourceforge.net/docs/SMISMOStruct.html
+
 Code used as a reference for PDU decoding: http://smstools3.kekekasvi.com/topic.php?id=288

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Siemens SMS Archive Parser</title>
+  <script type="module" src="./smi_parser.js"></script>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    /* ---------- Base layout ---------- */
+    body{font-family:Arial, sans-serif; margin:20px; line-height:1.45;}
+    h1{color:#333; margin-top:0;}
+
+    /* ---------- Pretty buttons ---------- */
+    input[type="file"]{display:none;}            /* hide native inputs */
+    .file-btn{
+      display:inline-flex; align-items:center; gap:0.5em;
+      padding:0.6em 1.2em; font-size:1em;
+      background:#1976d2; color:#fff; border:none; border-radius:6px;
+      cursor:pointer; transition:background .2s;
+      margin:0.4em 0;
+    }
+    .file-btn:hover{background:#1565c0;}
+
+    /* ---------- Message bubbles ---------- */
+    .message{margin:0.5em 0; padding:0.5em; border-radius:8px; border:1px solid #ccc; word-wrap:break-word;}
+    .incoming{background:#f1f8e9;}
+    .outgoing{background:#e3f2fd;}
+    .date-header{background:#fafafa; padding:0.3em 0.5em; margin-top:0.5em; border-left:4px solid #90caf9;}
+
+    /* ---------- Collapsible phone sections ---------- */
+    details{margin-bottom:1em;}
+    summary{
+      cursor:pointer; font-size:1.05em; font-weight:600;
+      list-style:none;
+      display:flex; align-items:center; gap:0.4em;
+    }
+    summary::-webkit-details-marker{display:none;}
+    summary::before{
+      font-family:"Font Awesome 6 Free"; font-weight:900;
+      content:"\f0da";
+      transition:transform .2s;
+    }
+    details[open] summary::before{transform:rotate(90deg);}
+  </style>
+</head>
+<body>
+<h1>Siemens SMS Archive Parser</h1>
+<p>Everything is parsed locally in your browser, no data is sent to the server</p>
+<div id="pickerContainer">
+  <!-- Directory picker -->
+  <label class="file-btn" for="dirInput">
+    <i class="fa-solid fa-folder-open"></i> Pick a directory with SMS Archive files
+  </label>
+  <input type="file" id="dirInput" webkitdirectory directory multiple />
+
+  <!-- Single-file picker -->
+  <label class="file-btn" for="fileInput">
+    <i class="fa-solid fa-file-import"></i> Pick a single SMS Archive file
+  </label>
+  <input type="file" id="fileInput" />
+</div>
+
+<div id="resultsContainer"></div>
+
+<script type="module">
+  import { SMSDecoder } from './smi_parser.js';
+
+  const fileInput  = document.getElementById("fileInput");
+  const dirInput   = document.getElementById("dirInput");
+  const resultsDiv = document.getElementById("resultsContainer");
+
+  /* Keep <br>s in message bodies */
+  const nl2br = (str) =>
+          (str ?? '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g,'$1<br>$2');
+
+  /* Trigger parsing whenever files are chosen */
+  fileInput.addEventListener("change", parseSelected);
+  dirInput.addEventListener("change", parseSelected);
+
+  async function parseSelected(){
+    const files = [...dirInput.files, ...fileInput.files];
+    if (!files.length){ return; }  // nothing picked yet
+
+    const grouped = {};
+
+    /* --- Decode every file --- */
+    for (const file of files){
+      try{
+        const arrayBuffer = await file.arrayBuffer();
+        const decoder     = new SMSDecoder();
+        const decoded     = decoder.decode(new Uint8Array(arrayBuffer));
+
+        const phone = decoded.type === "Incoming"
+                ? decoded.sender
+                : decoded.recipient || "Unknown";
+
+        decoded.file = file
+        const dateStr = decoded.timestamp?.split(" ")[0] ?? "Unknown Date";
+
+        grouped[phone]          ??= {};
+        grouped[phone][dateStr] ??= [];
+        grouped[phone][dateStr].push(decoded);
+      }catch(e){
+        console.error(`Failed to parse file ${file.name}:`, e);
+      }
+    }
+
+    resultsDiv.innerHTML = renderGrouped(grouped);
+  }
+
+  /* --- Build the result HTML --- */
+  function renderGrouped(grouped){
+    const phones = Object.keys(grouped)
+            .sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    if(!phones.length) return "<p>No valid SMS data found.</p>";
+
+    return phones.map(phone=>{
+      const dates = Object.keys(grouped[phone]).sort();
+      let phoneInner = "";
+      let totalMessages = 0;
+
+      dates.forEach(dateStr=>{
+        const messages = grouped[phone][dateStr]
+                .sort((a,b)=>new Date(a.timestamp) - new Date(b.timestamp));
+
+        totalMessages += messages.length;
+        phoneInner += `<div class="date-header">${dateStr}</div>`;
+        messages.forEach(msg=>{
+          const cls = msg.type === "Incoming" ? "incoming" : "outgoing";
+          phoneInner += `
+            <div class="message ${cls}">
+              <strong>${msg.type}</strong> – ${msg.timestamp || ""} <strong>${msg.file.webkitRelativePath || msg.file.name}</strong><br/>
+              <em>${msg.encoding}</em> – SMSC: ${msg.smsCenterNumber || "N/A"}<br/>
+              <div>${nl2br(msg.text)}</div>
+            </div>`;
+        });
+      });
+
+      const openAttr = totalMessages <= 10 ? " open" : "";
+      return `
+        <details${openAttr}>
+          <summary>Messages with: ${phone} (${totalMessages})</summary>
+          ${phoneInner}
+        </details>`;
+    }).join("");
+  }
+</script>
+</body>
+</html>
