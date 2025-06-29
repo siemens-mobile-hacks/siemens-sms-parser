@@ -40,6 +40,11 @@ function tzDecode(tzHex = '') {
     return `${sign}${h}:${m}`;
 }
 
+function trimTrailingFFs(hex) {
+    const s = _asStr(hex);
+    // Remove pairs of 'ff' from the end, leaving any unpaired 'f'.
+    return s.replace(/(?:ff)+$/gi, '');
+}
 /* ────────── 7-bit ALPHABET TABLES ───────────────────────────────────── */
 
 const DEF = [
@@ -157,7 +162,8 @@ class PDUDecoder {
             const bits = this.#alphaBits(dcs);
             skipChr = bits === 16 ? skipOct / 2 : bits === 8 ? skipOct : Math.ceil(skipOct * 8 / 7);
         }
-        const bits = this.#alphaBits(dcs), bodyHx = this.#dataAsHex.slice(udStart * 2);
+        const bits = this.#alphaBits(dcs);
+        const bodyHx = this.#dataAsHex.slice(udStart * 2);
         let encoding, text;
         switch (bits) {
             case 16: {
@@ -288,7 +294,7 @@ class SMSDecoder {
             const smsCAddressHex = this.#takeHex(this.#smsCLength - 1);
             this.#smsCAddress = semiPhone(smsCAddressHex);
             let pdu = this.#takeHex(176-this.#smsCLength-2);
-            pdu = pdu.replace(/ff+$/i, '')
+            pdu = trimTrailingFFs(pdu)
             let decodedPdu = new PDUDecoder().decode(pdu);
             if (parsingResult === undefined) {
                 parsingResult = decodedPdu;
