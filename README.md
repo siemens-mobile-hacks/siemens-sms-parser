@@ -1,39 +1,30 @@
 # Siemens SMS Archive Parser
 
-Code mostly from http://smstools3.kekekasvi.com/topic.php?id=288
-
-
-Parse SMI messages from "SMS archive"
+Parse SMI/SMO messages from "SMS archive" on Siemens phones.
 
 # Usage
 
-    node smi_parser.js "path/to/SMS Archive"
+    node cli.js "path/to/SMS Archive"
 
 or
 
-    node smi_parser "path/to/file.smi"
+    node cli.js "path/to/file.smi"
 
 Sample output:
 ```
-/home/user/SMS Archive/9.04.smi
-SMS DELIVER (receive)
-Receipt requested: no
-SMSC: 79184330000
-Sender: 79183232214
-TOA: 91 international, Numbering Plan: unknown
-TimeStamp: 2005-04-29 11:20:10 GMT +03:00
-TP-PID: 00
-TP-DCS: 00
-TP-DCS-desc: Uncompressed Text, No class
-Alphabet: Default (7bit)
 
-Message:
+--- /home/user/SMS archive/SMS archive/Inbox/Офис/29.04.smi ---
+Format: X55_X65_X75
+Type: Incoming
+Segments: 1/1
+Date: 2005-04-29 11:20:10 +03:00
+SMS Center: 79184330000
+Sender: 79183252714
+Encoding: GSM-7
+Length: 95
+Text: PRIVET! U NAS EST' KARTA ROSSII V JPG? OCHEN' SROCHNO NUGNO! ESLI NET, TO NUGNO POISKAT'. TARAS
 
-PRIVET! U NAS EST' KARTA ROSSII V JPG? OCHEN' SROCHNO NUGNO! ESLI NET, TO NUGNO POISKAT'. TARAS
 
 ````
-Messages with multiple segments are currently not parsed well.
-
 Format description: https://sisms.sourceforge.net/docs/SMISMOStruct.html
-
-(But currently this is mostly unused and only PDU data is extracted from the file)
+Code used as a reference for PDU decoding: http://smstools3.kekekasvi.com/topic.php?id=288
