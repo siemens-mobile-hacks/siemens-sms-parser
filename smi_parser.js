@@ -25,7 +25,11 @@ const semiPhone = hex => {
     const s = swapSemi(hex).split('').map(phoneMap).join('');
     return s.endsWith('F') ? s.slice(0, -1) : s;
 };
-
+const decodeTimestamp = ts =>{
+    if (ts === '00000000000000') return undefined;
+    let parts = swapSemi(ts).match(/../g);
+    return parts ? `20${parts[0]}-${parts[1]}-${parts[2]} ${parts[3]}:${parts[4]}:${parts[5]} ${tzDecode(parts[6])}` : 'invalid-ts';
+}
 function tzDecode(tzHex = '') {
     if (tzHex.length < 2) return '+00:00';
     let tz = hexToInt(tzHex[0]);
@@ -108,23 +112,20 @@ class PDUDecoder {
     }
     #takeInt = n => hexToInt(this.#takeHex(n));
 
-    #readTS() {
-        const r = this.#takeHex(7), p = swapSemi(r).match(/../g);
-        return p ? `20${p[0]}-${p[1]}-${p[2]} ${p[3]}:${p[4]}:${p[5]} ${tzDecode(p[6])}` : 'invalid-ts';
-    }
-
     #statusReport(meta) {
         const mr = this.#takeInt(1), raLen = this.#takeInt(1);
         this.#takeInt(1);
-        const ra = semiPhone(this.#takeHex(Math.ceil(raLen / 2)));
-        const ts = this.#readTS(), dts = this.#readTS(), st = this.#takeInt(1);
+        const recipient = semiPhone(this.#takeHex(Math.ceil(raLen / 2)));
+        const timestamp = decodeTimestamp(this.#takeHex(7));
+        const dischargeTimestamp = decodeTimestamp(this.#takeHex(7));
+        const status = this.#takeInt(1);
         return {
             type: 'STATUS_REPORT',
             messageRef: mr,
-            recipient: ra,
-            timestamp: ts,
-            dischargeTs: dts,
-            status: st
+            recipient: recipient,
+            timestamp: timestamp,
+            dischargeTs: dischargeTimestamp,
+            status: status
         };
     }
 
@@ -140,8 +141,8 @@ class PDUDecoder {
 
         const pid = this.#takeInt(1), dcs = this.#takeInt(1);
 
-        let timestamp = '';
-        if (meta.mt === 0) timestamp = this.#readTS();
+        let timestamp;
+        if (meta.mt === 0) timestamp = decodeTimestamp(this.#takeHex(7));
         else {
             const vpFmt = meta.fo & 0x18;
             if (vpFmt === 0x10) this.#takeInt(1); else if (vpFmt === 0x08 || vpFmt === 0x18) this.#takeHex(7);
@@ -246,8 +247,6 @@ class SMSDecoder {
     #smsCLength;
     #smsCType;
     #smsCAddress;
-    #pduStart;
-
 
     decode(bufOrHex) {
         if (bufOrHex.length <= 5) throw new Error(`File too short`);
@@ -273,7 +272,7 @@ class SMSDecoder {
             this.#smsStatus = this.#takeInt(1);
         }
         if (formatObject.hasOwnProperty('timestampOffset')) {
-            this.#timestamp = this.#takeInt(7);
+            this.#timestamp = decodeTimestamp(this.#takeHex(7));
         }
         if (formatObject.segmentStatusOffset - formatObject.timestampOffset > 7) {
             this.#takeInt(formatObject.segmentStatusOffset - formatObject.timestampOffset  - 7); //waste byte
@@ -297,6 +296,7 @@ class SMSDecoder {
                 parsingResult.smsCenterNumber = this.#smsCAddress;
                 parsingResult.smsPartsStored = this.#smsPartsStored;
                 parsingResult.smsPartsTotal  = this.#smsPartsTotal;
+                if (this.#timestamp !== undefined) parsingResult.timestamp = this.#timestamp;
             } else {
                 parsingResult.text += decodedPdu.text;
                 parsingResult.length += decodedPdu.length;
@@ -318,6 +318,7 @@ function formatOutput(decoded) {
     output += `Format: ${decoded.format}\n`;
     output += `Parts: ${decoded.smsPartsStored}/${decoded.smsPartsTotal}\n`;
     output += `SMS Center: ${decoded.smsCenterNumber}\n`;
+    if (decoded.timestamp !== undefined) output += `Timestamp: ${decoded.timestamp}\n`;
     output += `Type: ${decoded.type}\n`;
     output += `Recipient: ${decoded.recipient}\n`;
     output += `Encoding: ${decoded.encoding}\n`;
@@ -335,7 +336,7 @@ async function processFile(file) {
         const decoded = new SMSDecoder().decode(raw);
         console.log(formatOutput(decoded));
     } catch (e) {
-        console.log(`ERROR: ${e.message}`);
+        console.error(`ERROR: ${e.message}`);
     }
 }
 
