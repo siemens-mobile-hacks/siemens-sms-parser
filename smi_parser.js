@@ -37,7 +37,32 @@ function tzDecode(tzHex = '') {
     const m = String((tz % 4) * 15).padStart(2, '0');
     return `${sign}${h}:${m}`;
 }
+function sevenBitDecode(hex, skip, septets) {
+    let out = '', esc = false, bitPos = 0;
+    for (let i = 0; i < septets; i++) {
+        const b1 = hexToInt(hex.substr(Math.floor(bitPos / 8) * 2, 2) || '00');
+        const b2 = hexToInt(hex.substr(Math.floor(bitPos / 8) * 2 + 2, 2) || '00');
+        const v = ((b1 >> (bitPos % 8)) | (b2 << (8 - (bitPos % 8)))) & 0x7F;
+        bitPos += 7;
+        if (i < skip) continue;
+        if (esc) {
+            out += EXT.get(v) || '�';
+            esc = false;
+        } else if (v === 27) esc = true;
+        else out += DEF[v] ?? '�';
+    }
+    return out;
+}
 
+function ucs2Decode(hex, skipOct, udl) {
+    const sliceBytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
+    return new TextDecoder('utf-16be').decode(sliceBytes);
+}
+
+function octetDecode(hex, skipOct, udl) {
+    const bytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
+    return [...bytes].map(c => String.fromCharCode(c)).join('');
+}
 function trimTrailingFFs(hex) {
     const s = _asStr(hex);
     // Remove pairs of 'ff' from the end, leaving any unpaired 'f'.
@@ -107,7 +132,7 @@ const SmsStatuses = Object.freeze({
     UNDELIVERED: 1,
 })
 
-class PDUDecoder {
+export class PDUDecoder {
     #dataAsHex;
     #idx;
     #takeHex = n => {
@@ -142,7 +167,7 @@ class PDUDecoder {
         const toa = this.#takeInt(1);
         const addrRaw = this.#takeHex(Math.ceil(addrLen / 2));
         const isAlpha = (toa & 0x70) === 0x50;
-        const phone = isAlpha ? this.#seven(addrRaw, 0, addrLen) : semiPhone(addrRaw);
+        const phone = isAlpha ? sevenBitDecode(addrRaw, 0, addrLen) : semiPhone(addrRaw);
 
         const pid = this.#takeInt(1), dcs = this.#takeInt(1);
 
@@ -168,17 +193,17 @@ class PDUDecoder {
         switch (bits) {
             case 16: {
                 encoding = 'UCS-2';
-                text = this.#ucs2(bodyHx, skipOct, udl);
+                text = ucs2Decode(bodyHx, skipOct, udl);
                 break;
             }
             case 8: {
                 encoding = 'ASCII';
-                text = this.#octet(bodyHx, skipOct, udl);
+                text = octetDecode(bodyHx, skipOct, udl);
             }
                 break;
             case 7: {
                 encoding = 'GSM-7';
-                text = this.#seven(bodyHx, skipChr, udl);
+                text = sevenBitDecode(bodyHx, skipChr, udl);
                 break;
             }
             default: {
@@ -206,32 +231,6 @@ class PDUDecoder {
     #alphaBits = d => ((d & 0xC0) === 0 ? ((d & 0x0C) === 8 ? 16 : (d & 0x0C) === 4 ? 8 : 7) : ((d & 0xC0) === 0xC0 ? ((d & 0x30) === 0x20 ? 16 : (d & 0x30) === 0x30 ? 8 : 7) : 7));
 
     /* payload decoders -------------------------------------------------- */
-    #seven(hex, skip, septets) {
-        let out = '', esc = false, bitPos = 0;
-        for (let i = 0; i < septets; i++) {
-            const b1 = hexToInt(hex.substr(Math.floor(bitPos / 8) * 2, 2) || '00');
-            const b2 = hexToInt(hex.substr(Math.floor(bitPos / 8) * 2 + 2, 2) || '00');
-            const v = ((b1 >> (bitPos % 8)) | (b2 << (8 - (bitPos % 8)))) & 0x7F;
-            bitPos += 7;
-            if (i < skip) continue;
-            if (esc) {
-                out += EXT.get(v) || '�';
-                esc = false;
-            } else if (v === 27) esc = true;
-            else out += DEF[v] ?? '�';
-        }
-        return out;
-    }
-
-    #ucs2(hex, skipOct, udl) {
-        const sliceBytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
-        return new TextDecoder('utf-16be').decode(sliceBytes);
-    }
-
-    #octet(hex, skipOct, udl) {
-        const bytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
-        return [...bytes].map(c => String.fromCharCode(c)).join('');
-    }
     decode(bufOrHex) {
         this.#dataAsHex = bufOrHex;
         this.#idx = 0;
