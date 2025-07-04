@@ -13,6 +13,16 @@ const intToOctets = (integer) => {
     return new Uint8Array(bytes);
 };
 const bytesToHex = bytes => [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+
+function byteToBooleansLSBFirst(byte) {
+    if (byte < 0 || byte > 255) throw new RangeError("Input must be a 1-byte integer (0–255)");
+    const bits = [];
+    for (let i = 0; i < 8; i++) {
+        bits.push(Boolean((byte >> i) & 1));
+    }
+    return bits;
+}
+
 const hexToBytes = hex => Uint8Array.from(hex.match(/../g).map(h => parseInt(h, 16)));
 const _asStr = v => v instanceof Uint8Array ? bytesToHex(v) : String(v);
 const swapSemi = hex => _asStr(hex).replace(/../g, p => p[1] + p[0]);
@@ -37,6 +47,7 @@ function tzDecode(tzHex = '') {
     const m = String((tz % 4) * 15).padStart(2, '0');
     return `${sign}${h}:${m}`;
 }
+
 function sevenBitDecode(hex, skip, septets) {
     let out = '', esc = false, bitPos = 0;
     for (let i = 0; i < septets; i++) {
@@ -63,6 +74,7 @@ function octetDecode(hex, skipOct, udl) {
     const bytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
     return [...bytes].map(c => String.fromCharCode(c)).join('');
 }
+
 function trimTrailingFFs(hex) {
     const s = _asStr(hex);
     // Remove pairs of 'ff' from the end, leaving any unpaired 'f'.
@@ -143,9 +155,9 @@ export class PDUDecoder {
     #takeInt = n => hexToInt(this.#takeHex(n));
 
     #statusReport(meta) {
-        const mr = this.#takeInt(1), raLen = this.#takeInt(1);
+        const mr = this.#takeInt(1), recipientLength = this.#takeInt(1);
         this.#takeInt(1);
-        const recipient = semiPhone(this.#takeHex(Math.ceil(raLen / 2)));
+        const recipient = semiPhone(this.#takeHex(Math.ceil(recipientLength / 2)));
         const timestamp = decodeTimestamp(this.#takeHex(7));
         const dischargeTimestamp = decodeTimestamp(this.#takeHex(7));
         const status = this.#takeInt(1);
@@ -234,10 +246,113 @@ export class PDUDecoder {
     decode(bufOrHex) {
         this.#dataAsHex = bufOrHex;
         this.#idx = 0;
-        const fo = this.#takeInt(1), mt = fo & 3, udhi = !!(fo & 0x40);
-        if (mt === 2) return this.#statusReport();
+        const firstOctet = this.#takeInt(1), messageType = firstOctet & 3, udhi = !!(firstOctet & 0x40);
+        if (messageType === 2) return this.#statusReport();
 
-        return this.#deliverOrSubmit({fo, mt, udhi});
+        return this.#deliverOrSubmit({fo: firstOctet, mt: messageType, udhi});
+    }
+
+    decodeSmsDat(buffOrHex) {
+        this.#dataAsHex = buffOrHex;
+        if (this.#dataAsHex.length < 6) return undefined;
+        this.#idx = 0;
+        const folder = this.#takeInt(1);
+        //01 = inbox read, 03 = inbox unread, 05 = outbox sent, 07 = outbox unsent
+        const smsCLength = this.#takeInt(1);
+        const smsCType = this.#takeInt(1);
+        let smsCAddress;
+        if (smsCLength > 1) {
+            if (this.#dataAsHex.length/2 < (this.#idx + smsCLength)) throw new Error(`Entry aborted before SMS Center could be read in full`);
+            const smsCAddressHex = this.#takeHex(smsCLength - 1);
+            smsCAddress = semiPhone(smsCAddressHex);
+        } else {
+            smsCAddress = '';
+        }
+        const firstOctetHex = this.#takeHex(1);
+        const firstOctet = hexToInt(firstOctetHex);
+        const firstOctetBits = byteToBooleansLSBFirst(firstOctet);
+        const isCommandOrStatusReport = firstOctetBits[0];
+        const isSubmit = firstOctetBits[1];
+        const rejectDuplicatesOrMoreMessagesToSend = firstOctetBits[2];
+        const loopPrevention = firstOctetBits[3];
+        const validityPeriodFormat = firstOctetBits[3];
+        const validityPeriodFollowsInSubmit = firstOctetBits[4];
+        const statusReportStatus = firstOctetBits[5];
+        const udhiPresent = firstOctetBits[6];
+        const replyPath = firstOctetBits[7];
+
+        let messageRef;
+        if (folder === 0x05 || folder === 0x07) {
+             messageRef = this.#takeInt(1);
+        }
+        const addrLen = this.#takeInt(1);
+        const toa = this.#takeInt(1);
+        const addrRaw = this.#takeHex(Math.ceil(addrLen / 2));
+        const isAlpha = (toa & 0x70) === 0x50;
+        const phone = isAlpha ? sevenBitDecode(addrRaw, 0, addrLen) : semiPhone(addrRaw);
+
+        const pid = this.#takeInt(1);
+        const dcs = this.#takeInt(1);
+
+        let timestamp;
+        if (folder === 0x01 || folder === 0x03) {
+            timestamp = decodeTimestamp(this.#takeHex(7));
+        } else {
+            if (validityPeriodFollowsInSubmit) {
+                const validityPeriod = this.#takeInt(1)
+            }
+        }
+
+        const userDataLength = this.#takeInt(1);
+        const udStart = this.#idx;
+        let skipOct = 0, skipChr = 0, udh = '';
+        if (udhiPresent) {
+            const udhl = this.#takeInt(1);
+            udh = this.#dataAsHex.slice(udStart * 2, (udStart + udhl + 1) * 2);
+            skipOct = udhl + 1;
+            const bits = this.#alphaBits(dcs);
+            skipChr = bits === 16 ? skipOct / 2 : bits === 8 ? skipOct : Math.ceil(skipOct * 8 / 7);
+        }
+        const bits = this.#alphaBits(dcs);
+        // const bits= dcs === 0x00 ? 7 : dcs === 0x08 ? 16 : 8;
+        const bodyHx = this.#dataAsHex.slice(udStart * 2);
+        let encoding, text;
+        switch (bits) {
+            case 16: {
+                encoding = 'UCS-2';
+                text = ucs2Decode(bodyHx, skipOct, userDataLength);
+                break;
+            }
+            case 8: {
+                encoding = 'ASCII';
+                text = octetDecode(bodyHx, skipOct, userDataLength);
+            }
+                break;
+            case 7: {
+                encoding = 'GSM-7';
+                text = sevenBitDecode(bodyHx, skipChr, userDataLength);
+                break;
+            }
+            default: {
+                throw new Error(`Unknown number of bits: ${bits}`);
+            }
+        }
+
+        const common = {
+            firstOctet: firstOctet,
+            hasUdh: udhiPresent,
+            pid,
+            dcs,
+            classDesc: (dcs & 0x10) ? `class ${dcs & 3}` : '',
+            udh,
+            length: bits === 16 ? (userDataLength - skipOct) / 2 : (userDataLength - skipOct),
+            text,
+            encoding,
+        };
+
+        return (folder === 0x01 || folder === 0x03)
+            ? {...common, type: 'Incoming', sender: phone, timestamp}
+            : {...common, type: 'Outgoing', recipient: phone, messageRef: messageRef, timestamp}; // timestamp may be ''
     }
 }
 
@@ -318,4 +433,33 @@ export class SMSDecoder {
         return s;
     }
     #takeInt = n => hexToInt(this.#takeHex(n));
+}
+
+export class SMSDatParser {
+    #dataAsHex = '';
+    #idx = 2;
+    #takeHex = n => {
+        const s = this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
+        this.#idx += n;
+        return s;
+    }
+
+    decode(bufOrHex) {
+        if (bufOrHex.length <= 178) throw new Error(`File too short`);
+        this.#dataAsHex = _asStr(bufOrHex);
+        let messages = [];
+        while (this.#idx < bufOrHex.length) {
+            let pduHeader = this.#takeHex(2);
+            if (pduHeader !== '1111') {
+                throw new Error(`Invalid PDU header: ${pduHeader}`);
+            }
+            let pdu = this.#takeHex(176);
+            pdu = trimTrailingFFs(pdu)
+            let decodedPdu = new PDUDecoder().decodeSmsDat(pdu);
+            if (decodedPdu === undefined) continue;
+            messages.push(decodedPdu);
+        }
+
+        return messages;
+    }
 }
