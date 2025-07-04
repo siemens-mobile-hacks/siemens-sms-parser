@@ -192,38 +192,16 @@ export class PDUDecoder {
             if (vpFmt === 0x10) this.#takeInt(1); else if (vpFmt === 0x08 || vpFmt === 0x18) this.#takeHex(7);
         }
 
-        const udl = this.#takeInt(1), udStart = this.#idx;
-        let skipOct = 0, skipChr = 0, udh = '';
-        if (meta.udhi) {
-            const udhl = this.#takeInt(1);
-            udh = this.#dataAsHex.slice(udStart * 2, (udStart + udhl + 1) * 2);
-            skipOct = udhl + 1;
-            const bits = alphaBits(dcs);
-            skipChr = bits === 16 ? skipOct / 2 : bits === 8 ? skipOct : Math.ceil(skipOct * 8 / 7);
-        }
+        const udl = this.#takeInt(1);
+        const udStart = this.#idx;
+        let skipOct = 0;
         const bits = alphaBits(dcs);
-        const bodyHx = this.#dataAsHex.slice(udStart * 2);
-        let encoding, text;
-        switch (bits) {
-            case 16: {
-                encoding = 'UCS-2';
-                text = ucs2Decode(bodyHx, skipOct);
-                break;
-            }
-            case 8: {
-                encoding = 'ASCII';
-                text = octetDecode(bodyHx, skipOct);
-            }
-                break;
-            case 7: {
-                encoding = 'GSM-7';
-                text = sevenBitDecode(bodyHx, skipChr, udl);
-                break;
-            }
-            default: {
-                throw new Error(`Unknown number of bits: ${bits}`);
-            }
-        }
+        let {udh, encoding, text, length} = this.decodeUserData(
+            this.#dataAsHex.slice(udStart * 2),
+            meta.udhi,
+            bits,
+            udl
+        );
 
         const common = {
             firstOctet: meta.fo,
