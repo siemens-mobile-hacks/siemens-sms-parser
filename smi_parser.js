@@ -65,13 +65,13 @@ function sevenBitDecode(hex, skip, septets) {
     return out;
 }
 
-function ucs2Decode(hex, skipOct, udl) {
-    const sliceBytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
+function ucs2Decode(hex, skipOct) {
+    const sliceBytes = hexToBytes(hex.slice(skipOct * 2, hex.length - skipOct * 2));
     return new TextDecoder('utf-16be').decode(sliceBytes);
 }
 
-function octetDecode(hex, skipOct, udl) {
-    const bytes = hexToBytes(hex.slice(skipOct * 2, skipOct * 2 + udl * 2));
+function octetDecode(hex, skipOct) {
+    const bytes = hexToBytes(hex.slice(skipOct * 2, hex.length - skipOct * 2));
     return [...bytes].map(c => String.fromCharCode(c)).join('');
 }
 
@@ -205,12 +205,12 @@ export class PDUDecoder {
         switch (bits) {
             case 16: {
                 encoding = 'UCS-2';
-                text = ucs2Decode(bodyHx, skipOct, udl);
+                text = ucs2Decode(bodyHx, skipOct);
                 break;
             }
             case 8: {
                 encoding = 'ASCII';
-                text = octetDecode(bodyHx, skipOct, udl);
+                text = octetDecode(bodyHx, skipOct);
             }
                 break;
             case 7: {
@@ -320,12 +320,12 @@ export class PDUDecoder {
         switch (bits) {
             case 16: {
                 encoding = 'UCS-2';
-                text = ucs2Decode(bodyHx, skipOct, userDataLength);
+                text = ucs2Decode(bodyHx, skipOct);
                 break;
             }
             case 8: {
                 encoding = 'ASCII';
-                text = octetDecode(bodyHx, skipOct, userDataLength);
+                text = octetDecode(bodyHx, skipOct);
             }
                 break;
             case 7: {
