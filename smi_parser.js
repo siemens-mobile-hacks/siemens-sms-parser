@@ -224,8 +224,10 @@ export class PDUDecoder {
     decode(bufOrHex) {
         this.#dataAsHex = bufOrHex;
         this.#idx = 0;
-        const firstOctet = this.#takeInt(1), messageType = firstOctet & 3, udhi = !!(firstOctet & 0x40);
+        const firstOctet = hexToInt(this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + 2));
+        const messageType = firstOctet & 3;
         if (messageType === 2) return this.#statusReport();
+        return this.#decodePduFromFirstOctet()
 
         return this.#deliverOrSubmit({fo: firstOctet, mt: messageType, udhi});
     }
@@ -246,11 +248,16 @@ export class PDUDecoder {
         } else {
             smsCAddress = '';
         }
+
+        return this.#decodePduFromFirstOctet();
+    }
+
+    #decodePduFromFirstOctet() {
         const firstOctetHex = this.#takeHex(1);
         const firstOctet = hexToInt(firstOctetHex);
         const firstOctetBits = byteToBooleansLSBFirst(firstOctet);
-        const isCommandOrStatusReport = firstOctetBits[0];
-        const isSubmit = firstOctetBits[1];
+        const isSubmit = firstOctetBits[0];
+        const isCommandOrStatusReport = firstOctetBits[1];
         const rejectDuplicatesOrMoreMessagesToSend = firstOctetBits[2];
         const loopPrevention = firstOctetBits[3];
         const validityPeriodFormat = firstOctetBits[3];
@@ -259,8 +266,16 @@ export class PDUDecoder {
         const udhiPresent = firstOctetBits[6];
         const replyPath = firstOctetBits[7];
 
+        /**
+         * The Message Reference field (TP-MR) is used in all messages on the submission side with exception of
+         * the SMS-SUBMIT-REPORT (that is in SMS-SUBMIT, SMS-COMMAND and SMS-STATUS-REPORT).
+         * It is a single-octet value which is incremented each time a new message is submitted or a new SMS-COMMAND is sent.
+         * If the message submission fails, the mobile phone should repeat the submission with the same TP-MR value and
+         * with the TP-RD bit set to 1.
+         */
         let messageRef;
-        if (folder === 0x05 || folder === 0x07) {
+
+        if (isSubmit && !isCommandOrStatusReport) {
             messageRef = this.#takeInt(1);
         }
         const addrLen = this.#takeInt(1);
@@ -274,12 +289,12 @@ export class PDUDecoder {
         const bits = alphaBits(dcs);
 
         let timestamp;
-        if (folder === 0x01 || folder === 0x03) {
-            timestamp = decodeTimestamp(this.#takeHex(7));
-        } else {
+        if (isSubmit) {
             if (validityPeriodFollowsInSubmit) {
                 const validityPeriod = this.#takeInt(1)
             }
+        } else {
+            timestamp = decodeTimestamp(this.#takeHex(7));
         }
 
         const userDataLength = this.#takeInt(1);
@@ -304,9 +319,8 @@ export class PDUDecoder {
             encoding,
         };
 
-        return (folder === 0x01 || folder === 0x03)
-            ? {...common, type: 'Incoming', sender: phone, timestamp}
-            : {...common, type: 'Outgoing', recipient: phone, messageRef: messageRef, timestamp}; // timestamp may be ''
+        return isSubmit ? {...common, type: 'Outgoing', recipient: phone, messageRef: messageRef}
+            : {...common, type: 'Incoming', sender: phone, timestamp};
     }
 
     decodeUserData(bodyHx, udhiPresent, bits, userDataLength) {
