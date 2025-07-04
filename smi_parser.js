@@ -150,9 +150,12 @@ export class PDUDecoder {
     #dataAsHex;
     #idx;
     #takeHex = n => {
-        const s = this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
+        const s = this.#peekHex(n);
         this.#idx += n;
         return s;
+    }
+    #peekHex = n => {
+        return this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + n * 2);
     }
     #takeInt = n => hexToInt(this.#takeHex(n));
 
@@ -173,83 +176,36 @@ export class PDUDecoder {
         };
     }
 
-    #deliverOrSubmit(meta) {
-        let mr = null;                                   // ▼ SUBMIT MR
-        if (meta.mt === 1) mr = this.#takeInt(1);            // message-reference only in SUBMIT
-
-        const addrLen = this.#takeInt(1);
-        const toa = this.#takeInt(1);
-        const addrRaw = this.#takeHex(Math.ceil(addrLen / 2));
-        const isAlpha = (toa & 0x70) === 0x50;
-        const phone = isAlpha ? sevenBitDecode(addrRaw, 0, addrLen) : semiPhone(addrRaw);
-
-        const pid = this.#takeInt(1), dcs = this.#takeInt(1);
-
-        let timestamp;
-        if (meta.mt === 0) timestamp = decodeTimestamp(this.#takeHex(7));
-        else {
-            const vpFmt = meta.fo & 0x18;
-            if (vpFmt === 0x10) this.#takeInt(1); else if (vpFmt === 0x08 || vpFmt === 0x18) this.#takeHex(7);
-        }
-
-        const udl = this.#takeInt(1);
-        const udStart = this.#idx;
-        let skipOct = 0;
-        const bits = alphaBits(dcs);
-        let {udh, encoding, text, length} = this.decodeUserData(
-            this.#dataAsHex.slice(udStart * 2),
-            meta.udhi,
-            bits,
-            udl
-        );
-
-        const common = {
-            firstOctet: meta.fo,
-            hasUdh: meta.udhi,
-            pid,
-            dcs,
-            classDesc: (dcs & 0x10) ? `class ${dcs & 3}` : '',
-            udh,
-            length: bits === 16 ? (udl - skipOct) / 2 : (udl - skipOct),
-            text,
-            encoding,
-        };
-
-        return meta.mt === 0
-            ? {...common, type: 'Incoming', sender: phone, timestamp}
-            : {...common, type: 'Outgoing', recipient: phone, messageRef: mr, timestamp}; // timestamp may be ''
-    }
-
-    /* payload decoders -------------------------------------------------- */
-    decode(bufOrHex) {
-        this.#dataAsHex = bufOrHex;
-        this.#idx = 0;
-        const firstOctet = hexToInt(this.#dataAsHex.slice(this.#idx * 2, this.#idx * 2 + 2));
-        const messageType = firstOctet & 3;
-        if (messageType === 2) return this.#statusReport();
-        return this.#decodePduFromFirstOctet()
-
-        return this.#deliverOrSubmit({fo: firstOctet, mt: messageType, udhi});
-    }
-
-    decodeSmsDat(buffOrHex) {
-        this.#dataAsHex = buffOrHex;
+    decode(hex) {
+        this.#dataAsHex = trimTrailingFFs(hex);
         if (this.#dataAsHex.length < 6) return undefined;
         this.#idx = 0;
-        const folder = this.#takeInt(1);
-        //01 = inbox read, 03 = inbox unread, 05 = outbox sent, 07 = outbox unsent
         const smsCLength = this.#takeInt(1);
         const smsCType = this.#takeInt(1);
         let smsCAddress;
         if (smsCLength > 1) {
-            if (this.#dataAsHex.length / 2 < (this.#idx + smsCLength)) throw new Error(`Entry aborted before SMS Center could be read in full`);
+            if (this.#dataAsHex.length < (this.#idx + smsCLength * 2)) throw new Error(`Entry aborted before SMS Center could be read in full`);
             const smsCAddressHex = this.#takeHex(smsCLength - 1);
             smsCAddress = semiPhone(smsCAddressHex);
         } else {
             smsCAddress = '';
         }
+        const firstOctet = hexToInt(this.#peekHex(1));
+        const messageType = firstOctet & 3;
+        if (messageType === 2) return this.#statusReport();
+        const dataAfterFirstOctet = this.#decodePduFromFirstOctet()
 
-        return this.#decodePduFromFirstOctet();
+        return {
+            ...dataAfterFirstOctet,
+            smsCType,
+            smsCAddress
+        }
+    }
+
+    decodeSmsDat(hex) {
+        const folder = hex.slice(0, 2) //01 = inbox read, 03 = inbox unread, 05 = outbox sent, 07 = outbox unsent
+
+        return this.decode(hex.slice(2, hex.length - 1));
     }
 
     #decodePduFromFirstOctet() {
@@ -368,9 +324,6 @@ export class SMSDecoder {
     #smsStatus;
     #timestamp;
     #segmentStatus;
-    #smsCLength;
-    #smsCType;
-    #smsCAddress;
 
     decode(bufOrHex) {
         if (bufOrHex.length <= 5) throw new Error(`File too short`);
@@ -403,21 +356,23 @@ export class SMSDecoder {
         }
         let parsingResult;
         for (let smsPartId = 0; smsPartId < this.#smsPartsTotal; smsPartId++) {
+            if ((this.#idx + 176) * 2 > this.#dataAsHex.length) {
+                console.error(`Warning: Segment ${smsPartId + 1} is not present in full, trying to read partial segment.`);
+            }
+            let pdu = this.#takeHex(176);
             if (formatObject.hasOwnProperty('segmentStatusOffset')) {
-                this.#segmentStatus = this.#takeInt(1);
+                this.#segmentStatus = hexToInt(pdu.slice(0, 2))
+                pdu = pdu.slice(2);
             }
 
-            this.#smsCLength = this.#takeInt(1);
-            this.#smsCType = this.#takeInt(1);
-            const smsCAddressHex = this.#takeHex(this.#smsCLength - 1);
-            this.#smsCAddress = semiPhone(smsCAddressHex);
-            let pdu = this.#takeHex(176 - this.#smsCLength - 2);
-            pdu = trimTrailingFFs(pdu)
             let decodedPdu = new PDUDecoder().decode(pdu);
+            if (decodedPdu === undefined) {
+                console.error(`Warning: Segment ${smsPartId + 1} could not be decoded. Skipping.`);
+                continue;
+            }
             if (parsingResult === undefined) {
                 parsingResult = decodedPdu;
                 parsingResult.format = this.#format;
-                parsingResult.smsCenterNumber = this.#smsCAddress;
                 parsingResult.smsPartsStored = this.#smsPartsStored;
                 parsingResult.smsPartsTotal = this.#smsPartsTotal;
                 if (this.#timestamp !== undefined) parsingResult.timestamp = this.#timestamp;
@@ -456,7 +411,6 @@ export class SMSDatParser {
                 throw new Error(`Invalid PDU header: ${pduHeader}`);
             }
             let pdu = this.#takeHex(176);
-            pdu = trimTrailingFFs(pdu)
             let decodedPdu = new PDUDecoder().decodeSmsDat(pdu);
             if (decodedPdu === undefined) continue;
             messages.push(decodedPdu);
