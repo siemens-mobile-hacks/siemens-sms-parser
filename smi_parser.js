@@ -198,7 +198,8 @@ export class PDUDecoder {
         return {
             ...dataAfterFirstOctet,
             smsCenterType,
-            smsCenterNumber
+            smsCenterNumber,
+            format: "SMS.dat"
         }
     }
 
