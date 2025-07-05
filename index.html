@@ -20,6 +20,15 @@
       background:#1976d2; color:#fff; border:none; border-radius:6px;
       cursor:pointer; transition:background .2s;
       margin:0.4em 0;
+      .loading & {
+        display: none;
+      }
+    }
+    .loader {
+      display: none;
+      .loading & {
+        display: block;
+      }
     }
     .file-btn:hover{background:#1565c0;}
 
@@ -61,7 +70,7 @@
   </label>
   <input type="file" id="fileInput" />
 </div>
-
+<div class="loader">Loading...</div>
 <div id="resultsContainer"></div>
 
 <script type="module">
@@ -82,7 +91,7 @@
   async function parseSelected(){
     const files = [...dirInput.files, ...fileInput.files];
     if (!files.length){ return; }  // nothing picked yet
-
+    document.querySelector('body').classList.add("loading");
     const grouped = {};
 
     /* --- Decode every file --- */
@@ -116,6 +125,7 @@
     }
 
     resultsDiv.innerHTML = renderGrouped(grouped);
+    document.querySelector('body').classList.remove("loading");
   }
 
   /* --- Build the result HTML --- */
