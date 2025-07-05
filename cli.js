@@ -19,8 +19,6 @@ function formatOutput(decoded) {
     return output;
 }
 
-/* ────────── CLI WALKER (skips 18-byte SMO header) ────────────────────── */
-
 async function processFile(file) {
     const raw = await fs.readFile(file);
     try {
