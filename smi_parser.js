@@ -206,7 +206,7 @@ export class PDUDecoder {
     decodeSmsDat(hex) {
         const folder = hex.slice(0, 2) //01 = inbox read, 03 = inbox unread, 05 = outbox sent, 07 = outbox unsent
 
-        return this.decode(hex.slice(2, hex.length - 1));
+        return this.decode(hex.slice(2, hex.length));
     }
 
     #decodePduFromFirstOctet() {
@@ -408,7 +408,7 @@ export class SMSDatParser {
         let messages = [];
         while (this.#idx < bufOrHex.length) {
             let pduHeader = this.#takeHex(2);
-            if (pduHeader === 'ffff') { //empty message slot
+            if (pduHeader === 'ffff') { //empty message slot on NewSGold
                 continue;
             }
             if (pduHeader !== '1111') {
