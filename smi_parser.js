@@ -181,14 +181,14 @@ export class PDUDecoder {
         if (this.#dataAsHex.length < 6) return undefined;
         this.#idx = 0;
         const smsCLength = this.#takeInt(1);
-        const smsCType = this.#takeInt(1);
-        let smsCAddress;
+        const smsCenterType = this.#takeInt(1);
+        let smsCenterNumber;
         if (smsCLength > 1) {
             if (this.#dataAsHex.length < (this.#idx + smsCLength * 2)) throw new Error(`Entry aborted before SMS Center could be read in full`);
             const smsCAddressHex = this.#takeHex(smsCLength - 1);
-            smsCAddress = semiPhone(smsCAddressHex);
+            smsCenterNumber = semiPhone(smsCAddressHex);
         } else {
-            smsCAddress = '';
+            smsCenterNumber = '';
         }
         const firstOctet = hexToInt(this.#peekHex(1));
         const messageType = firstOctet & 3;
@@ -197,8 +197,8 @@ export class PDUDecoder {
 
         return {
             ...dataAfterFirstOctet,
-            smsCType,
-            smsCAddress
+            smsCenterType,
+            smsCenterNumber
         }
     }
 
