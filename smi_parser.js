@@ -407,6 +407,9 @@ export class SMSDatParser {
         let messages = [];
         while (this.#idx < bufOrHex.length) {
             let pduHeader = this.#takeHex(2);
+            if (pduHeader === 'ffff') { //empty message slot
+                continue;
+            }
             if (pduHeader !== '1111') {
                 throw new Error(`Invalid PDU header: ${pduHeader}`);
             }
