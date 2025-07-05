@@ -2,7 +2,7 @@
 
 import {promises as fs} from 'node:fs';
 import {join, resolve} from 'node:path';
-import { SMSDecoder } from './smi_parser.js';
+import {SMSDatParser, SMSDecoder} from './smi_parser.js';
 function formatOutput(decoded) {
     let output = '';
     output += `Format: ${decoded.format}\n`;
@@ -24,8 +24,16 @@ function formatOutput(decoded) {
 async function processFile(file) {
     const raw = await fs.readFile(file);
     try {
-        const decoded = new SMSDecoder().decode(raw);
-        console.log(formatOutput(decoded));
+        if (file.endsWith('.dat'))  {
+            const messages = new SMSDatParser().decode(raw);
+            for (let i=0;i<messages.length;i++) {
+                console.log("*Message #" + (i+1) + "*");
+                console.log(formatOutput(messages[i]));
+            }
+        } else {
+            const decoded = new SMSDecoder().decode(raw);
+            console.log(formatOutput(decoded));
+        }
     } catch (e) {
         console.error(`ERROR: ${e.message}`);
     }
