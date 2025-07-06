@@ -18,7 +18,7 @@ function formatOutput(decoded) {
     let output = '';
     output += `Format: ${decoded.format}\n`;
     output += `Type: ${decoded.type}\n`;
-    output += `Segments: ${decoded.smsPartsStored}/${decoded.smsPartsTotal}\n`;
+    output += `Segments: ${decoded.segmentsStored}/${decoded.segmentsTotal}\n`;
     if (decoded.timestamp !== undefined) output += `Date: ${decoded.timestamp}\n`;
     output += `SMS Center: ${decoded.smsCenterNumber}\n`;
     if (decoded.recipient !== undefined) output += `Recipient: ${decoded.recipient}\n`;

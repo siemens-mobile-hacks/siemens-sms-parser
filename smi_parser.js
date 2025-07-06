@@ -173,13 +173,18 @@ export class PDUDecoder {
             ...decodedPdu,
             smsCenterType,
             smsCenterNumber,
-            format: 'SMS.dat'
         };
     }
 
     decodeSmsDat(u8) {
         const folderFlag = u8[0]; //01 = inbox read, 03 = inbox unread, 05 = outbox sent, 07 = outbox unsent
-        return this.decode(u8.subarray(1));
+        const decoded = this.decode(u8.subarray(1));
+        if (decoded === undefined) return undefined;
+        return {
+            ...decoded,
+            folder: folderFlag,
+            format: 'SMS.dat'
+        };
     }
 
     /* ‑‑‑‑‑‑ internal helpers ‑‑‑‑‑‑ */
@@ -249,7 +254,16 @@ export class PDUDecoder {
         const udl = this.#cursor.takeByte();
         const udBody = this.#cursor.take(this.#cursor.remaining()); // rest of buffer
 
-        const { udh, encoding, text, length } = this.#decodeUserData(
+        const {
+            udh,
+            referenceNumber,
+            segmentsTotal,
+            sequenceNumber,
+            isReference16Bit,
+            encoding,
+            text,
+            length
+        } = this.#decodeUserData(
             udBody,
             udhiPresent,
             bitsPerChar,
@@ -263,6 +277,10 @@ export class PDUDecoder {
             dcs,
             classDesc: dcs & 0x10 ? `class ${(dcs & 3)}` : '',
             udh,
+            referenceNumber,
+            segmentsTotal,
+            sequenceNumber,
+            isReference16Bit,
             length,
             text,
             encoding
@@ -275,12 +293,31 @@ export class PDUDecoder {
 
     #decodeUserData(body, udhiPresent, bitsPerChar, udl) {
         let skipOct = 0;
-        let udhBytes = new Uint8Array(0);
-
+        let userDataHeaderBytes = new Uint8Array(0);
+        let referenceNumber, segmentsTotal, sequenceNumber, isReference16Bit;
         if (udhiPresent) {
             const udhl = body[0];
-            udhBytes = body.subarray(0, udhl + 1);
+            userDataHeaderBytes = body.subarray(0, udhl + 1);
             skipOct = udhl + 1;
+            let currentByte = 1;// Start after the UDH length octet (index 0)
+            const informationElementIdentifier = userDataHeaderBytes[currentByte++];
+            const informationElementDataLength = userDataHeaderBytes[currentByte++];
+
+            const is8BitConcat = informationElementIdentifier === 0x00 && informationElementDataLength === 0x03;
+            const is16BitConcat = informationElementIdentifier === 0x08 && informationElementDataLength === 0x04;
+
+            if (is8BitConcat || is16BitConcat) {
+                isReference16Bit = is16BitConcat;
+
+                referenceNumber = isReference16Bit
+                    ? (userDataHeaderBytes[currentByte] << 8) | userDataHeaderBytes[currentByte + 1]
+                    : userDataHeaderBytes[currentByte];
+
+                const referenceNumberOctetCount = isReference16Bit ? 2 : 1;
+
+                segmentsTotal = userDataHeaderBytes[currentByte + referenceNumberOctetCount];
+                sequenceNumber = userDataHeaderBytes[currentByte + referenceNumberOctetCount + 1];
+            }
         }
 
         let encoding, text;
@@ -304,7 +341,16 @@ export class PDUDecoder {
         const length =
             bitsPerChar === 16 ? (body.length - skipOct) / 2 : udl - skipOct;
 
-        return { udh: bytesToHex(udhBytes), encoding, text, length };
+        return {
+            udh: bytesToHex(userDataHeaderBytes),
+            referenceNumber,
+            segmentsTotal,
+            sequenceNumber,
+            isReference16Bit,
+            encoding,
+            text,
+            length
+        };
     }
 }
 
@@ -356,8 +402,8 @@ export class SMSDecoder {
 
         const format = FileFormats[formatName];
 
-        const smsPartsTotal = format.smsPartsOffset ? cursor.takeByte() : 0;
-        const smsPartsStored = format.smsPartsOffset ? cursor.takeByte() : 0;
+        const segmentsTotal = format.smsPartsOffset ? cursor.takeByte() : 0;
+        const segmentsStored = format.smsPartsOffset ? cursor.takeByte() : 0;
         const smsType = format.smsTypeOffset ? cursor.takeByte() : undefined;
         const smsStatus = format.smsStatusOffset ? cursor.takeByte() : undefined;
         const timestamp = format.timestampOffset
@@ -368,7 +414,7 @@ export class SMSDecoder {
             cursor.take(format.segmentStatusOffset - format.timestampOffset - 7); // waste byte
 
         let parsingResult;
-        for (let part = 0; part < smsPartsTotal; part++) {
+        for (let part = 0; part < segmentsTotal; part++) {
             if (cursor.remaining() < 176)
                 console.warn(`Segment ${part + 1} incomplete – decoding anyway`);
             let pdu = cursor.take(176);
@@ -385,8 +431,8 @@ export class SMSDecoder {
                 parsingResult = {
                     ...decodedPdu,
                     format,
-                    smsPartsTotal,
-                    smsPartsStored
+                    segmentsTotal,
+                    segmentsStored
                 };
                 if (timestamp !== undefined) parsingResult.timestamp = timestamp;
                 if (smsType !== undefined) parsingResult.smsType = smsType;
@@ -409,20 +455,77 @@ export class SMSDatParser {
         const NSG_EMPTY =  Uint8Array.from([0xff, 0xff]);
         const EXPECTED_HEADER =  Uint8Array.from([0x11, 0x11]);
 
-        const messages = [];
+        const segments = [];
         while (cursor.remaining() >= 2) {
             const hdr = cursor.take(2);
             if (bytesEqual(hdr, NSG_EMPTY)) continue;
             if (!bytesEqual(hdr, EXPECTED_HEADER))
                 throw new Error(`Invalid PDU header: ${bytesToHex(hdr)}`);
 
-            if (cursor.remaining() < 176) {
+            if (cursor.remaining() < 176)
                 console.warn('Incomplete PDU record in SMS.dat, attempting a partial read');
-            }
             const pdu = cursor.take(176);
-            const decodedPdu = new PDUDecoder().decodeSmsDat(pdu);
-            if (decodedPdu !== undefined) messages.push(decodedPdu);
+            const decoded = new PDUDecoder().decodeSmsDat(pdu);
+            if (decoded !== undefined) segments.push(decoded);
         }
-        return messages;
+
+        /* Second pass: group and merge concatenated segments */
+        const multipartBuckets = new Map(); // key → {meta, parts[]}
+
+        const concatenatedMessages = [];
+        for (const segment of segments) {
+            if (segment.referenceNumber === undefined || segment.segmentsTotal === 1) { // plain single‑segment SMS
+                segment.segmentsTotal = 1
+                segment.segmentsStored = 1
+                concatenatedMessages.push(segment);
+                continue;
+            }
+
+            // Use sender/recipient + ref as bucket key
+            const peer = segment.sender ?? segment.recipient;
+            const dir = segment.sender ? 'IN' : 'OUT';
+            const key = `${dir}:${peer}:${segment.referenceNumber}`;
+
+            let bucket = multipartBuckets.get(key);
+            if (bucket === undefined) {
+                bucket = {
+                    first: segment,
+                    total: segment.segmentsTotal,
+                    parts: new Array(segment.segmentsTotal).fill(undefined)
+                };
+                multipartBuckets.set(key, bucket);
+            }
+            if (bucket.parts[segment.sequenceNumber - 1] === undefined) {
+                bucket.parts[segment.sequenceNumber - 1] = segment;
+            } else {
+                console.warn(`Duplicate segment ${segment.sequenceNumber} of ${segment.referenceNumber} from ${peer}`);
+            }
+        }
+
+        // Assemble buckets whose part list is complete
+        for (const {first, total, parts} of multipartBuckets.values()) {
+            const merged = {...first}; // shallow clone
+            merged.referenceNumber = first.referenceNumber;
+            merged.totalSegments = total;
+            merged.sequenceNumber = 1;
+
+            // merged.length = parts.reduce((s, p) => s + p.length, 0);
+            // merged.text = parts.map(p => p.text).join('');
+            merged.segmentsStored = 0;
+            merged.legnth = 0;
+            merged.text = '';
+            for (const part of parts) {
+                if (part === undefined) {
+                    merged.text += '<missing segment>';
+                } else {
+                    merged.segmentsStored++;
+                    merged.length += part.length;
+                    merged.text += part.text;
+                }
+            }
+            concatenatedMessages.push(merged);
+        }
+
+        return concatenatedMessages;
     }
 }
