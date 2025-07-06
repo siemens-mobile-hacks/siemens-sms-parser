@@ -1,8 +1,19 @@
 #!/usr/bin/env node
 
-import {promises as fs} from 'node:fs';
-import {join, resolve} from 'node:path';
-import {SMSDatParser, SMSDecoder} from './smi_parser.js';
+import { promises as fs } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { SMSDatParser, SMSDecoder } from './smi_parser.js';
+
+const args   = process.argv.slice(2);
+const debug  = args.includes('--debug');
+const target = args.find(a => !a.startsWith('-'));
+
+if (!target) {
+    console.error('Usage: node cli.js <file|directory> [--debug]');
+    process.exit(1);
+}
+
+
 function formatOutput(decoded) {
     let output = '';
     output += `Format: ${decoded.format}\n`;
@@ -33,7 +44,7 @@ async function processFile(file) {
             console.log(formatOutput(decoded));
         }
     } catch (e) {
-        console.error(`ERROR: ${e.message}`);
+        console.error(`ERROR: ${e.message}${debug ? `\n${e.stack}` : ''}`);
     }
 }
 
@@ -43,7 +54,7 @@ async function walk(p) {
         for (const f of await fs.readdir(p)) await walk(join(p, f));
     } else if (stat.isFile()) {
         console.log(`--- ${p} ---`);
-        if (stat.size > 128*1024) {
+        if (stat.size > 128 * 1024) {
             console.error(`ERROR: File too large: ${p}`);
             return;
         }
@@ -51,14 +62,8 @@ async function walk(p) {
     }
 }
 
-/* ────────── ENTRY POINT ──────────────────────────────────────────────── */
 
-const target = process.argv[2];
-if (!target) {
-    console.error('Usage: node cli.js <file|directory>');
-    process.exit(1);
-}
 walk(resolve(target)).catch(err => {
-    console.error(err);
+    console.error(debug ? err : `ERROR: ${err.message}`);
     process.exit(1);
 });
