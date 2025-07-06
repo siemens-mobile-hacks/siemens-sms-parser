@@ -43,7 +43,6 @@ export const semiPhone = bcd => {
     return s.endsWith('F') ? s.slice(0, -1) : s;
 };
 
-const swapNibbles = byte => ((byte & 0x0f) << 4) | (byte >> 4);
 const bcdByteToNumber = b =>
     ((b >> 4) & 0x0F) * 10 + (b & 0x0F);   // 0x21 → 12
 
