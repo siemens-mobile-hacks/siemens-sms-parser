@@ -508,8 +508,6 @@ export class SMSDatParser {
             merged.totalSegments = total;
             merged.sequenceNumber = 1;
 
-            // merged.length = parts.reduce((s, p) => s + p.length, 0);
-            // merged.text = parts.map(p => p.text).join('');
             merged.segmentsStored = 0;
             merged.legnth = 0;
             merged.text = '';
