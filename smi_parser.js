@@ -208,7 +208,7 @@ export class PDUDecoder {
     }
 
     #decodePduFromFirstOctet() {
-        const firstOctet = this.#cursor.take(1)[0]; // consume FO
+        const firstOctet = this.#cursor.takeByte(); // consume FO
         const firstOctetBits = byteToBooleansLSBFirst(firstOctet);
         const isSubmit = firstOctetBits[0];
         const isCommandOrStatusReport = firstOctetBits[1];
