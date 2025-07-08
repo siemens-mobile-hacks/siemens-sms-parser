@@ -166,7 +166,7 @@ export class PDUDecoder {
         const messageType = firstOctet & 3;
         if (messageType === 2) return this.#statusReport(smsCenterType, smsCenterNumber);
 
-        const decodedPdu = this.#decodePduFromFirstOctet(firstOctet);
+        const decodedPdu = this.#decodePduFromFirstOctet();
 
         return {
             ...decodedPdu,
@@ -208,8 +208,8 @@ export class PDUDecoder {
         };
     }
 
-    #decodePduFromFirstOctet(firstOctet) {
-        this.#cursor.take(1); // consume FO
+    #decodePduFromFirstOctet() {
+        const firstOctet = this.#cursor.take(1)[0]; // consume FO
         const firstOctetBits = byteToBooleansLSBFirst(firstOctet);
         const isSubmit = firstOctetBits[0];
         const isCommandOrStatusReport = firstOctetBits[1];
