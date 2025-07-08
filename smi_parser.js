@@ -186,7 +186,6 @@ export class PDUDecoder {
         };
     }
 
-    /* ‑‑‑‑‑‑ internal helpers ‑‑‑‑‑‑ */
     #statusReport(scaType, scaNumber) {
         const mr = this.#cursor.takeByte();
         const recipientLen = this.#cursor.takeByte();
