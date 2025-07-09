@@ -159,8 +159,11 @@ export class PDUDecoder {
 
         const smsCenterLength = this.#cursor.takeByte();
         const smsCenterType = this.#cursor.takeByte();
-        const smsCenterNumber =
-            smsCenterLength > 1 ? semiPhone(this.#cursor.take(smsCenterLength - 1)) : '';
+        let smsCenterNumber = '';
+        if (smsCenterLength > 1) {
+            const smsCenterRaw = this.#cursor.take(smsCenterLength - 1)
+            smsCenterNumber = semiPhone(smsCenterRaw);
+        }
 
         const firstOctet = this.#cursor.peek(1)[0];
         const messageType = firstOctet & 3;
@@ -214,8 +217,9 @@ export class PDUDecoder {
         const isCommandOrStatusReport = firstOctetBits[1];
         const rejectDuplicatesOrMoreMessagesToSend = firstOctetBits[2];
         const loopPrevention = firstOctetBits[3];
-        const validityPeriodFormat = firstOctetBits[3];
-        const validityPeriodFollowsInSubmit = firstOctetBits[4];
+
+        const validityPeriodFormat = firstOctetBits[3]; //TP-VPF bit 1
+        const validityPeriodFollowsInSubmit = firstOctetBits[4]; //TP-VPF bit 2
         const statusReportStatus = firstOctetBits[5];
         const udhiPresent = firstOctetBits[6];
         const replyPath = firstOctetBits[7];
@@ -243,8 +247,30 @@ export class PDUDecoder {
         const bitsPerChar = alphaBits(dcs);
 
         let timestamp;
+        /**
+         * An SMS-SUBMIT TPDU may contain a TP-VP parameter which limits the time period for which the SMSC would attempt
+         * to deliver the message. However, the validity period is usually limited globally by the SMSC configuration parameter
+         * — often to 48 or 72 hours. The Validity Period format is defined by the Validity Period Format field:
+         * TP-VPF 	TP-VP format 	TP-VP length
+         * 0 0 	TP-VP not present 	0
+         * 0 1 	Enhanced format 	7
+         * 1 0 	Relative format 	1
+         * 1 1 	Absolute format 	7
+         *
+         *
+         * Relative format
+         * Relative Validity Period Values TP-VP value 	Validity period 	Possible validity periods
+         * 0–143 	(TP-VP + 1) x 5 minutes 	5, 10, 15 minutes ... 11:55, 12:00 hours
+         * 144–167 	(12 + (TP-VP - 143) / 2 ) hours 	12:30, 13:00, ... 23:30, 24:00 hours
+         * 168–196 	(TP-VP - 166) days 	2, 3, 4, ... 30 days
+         * 197–255 	(TP-VP - 192) weeks 	5, 6, 7, ... 63 weeks
+         */
+        let validityPeriod;
         if (isSubmit) {
-            if (validityPeriodFollowsInSubmit) this.#cursor.takeByte(); // skip VP
+            if (validityPeriodFollowsInSubmit) {
+                //this only supports relative format, enhanced and absolute formats are 7 bytes
+                validityPeriod = this.#cursor.takeByte();
+            }
         } else {
             timestamp = decodeTimestamp(this.#cursor.take(7));
         }
@@ -285,7 +311,7 @@ export class PDUDecoder {
         };
 
         return isSubmit
-            ? { ...common, type: 'Outgoing', recipient: phone, messageRef }
+            ? { ...common, type: 'Outgoing', recipient: phone, messageRef, validityPeriod }
             : { ...common, type: 'Incoming', sender: phone, timestamp };
     }
 
