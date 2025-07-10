@@ -2,7 +2,7 @@
 
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { SMSDatParser, SMSDecoder } from './smi_parser.js';
+import { SMSDatParser, SMSDecoder } from './sms-parser.js';
 
 const args   = process.argv.slice(2);
 const debug  = args.includes('--debug');
@@ -24,6 +24,7 @@ function formatOutput(decoded) {
     if (decoded.recipient !== undefined) output += `Recipient: ${decoded.recipient}\n`;
     if (decoded.sender !== undefined) output += `Sender: ${decoded.sender}\n`;
     output += `Encoding: ${decoded.encoding}\n`;
+    output += `Ref: ${decoded.messageRef}\n`;
     output += `Length: ${decoded.length}\n`;
     output += `Text: ${decoded.text}\n`;
 
