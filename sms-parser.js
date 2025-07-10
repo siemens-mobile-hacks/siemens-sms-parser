@@ -2,10 +2,10 @@ const bytesEqual = (a, b) =>
     a.length === b.length && a.every((v, i) => v === b[i]);
 
 
-export const bytesToHex = bytes =>
+const bytesToHex = bytes =>
     [...bytes].map(b => b.toString().padStart(2, '0')).join('');
 
-export const byteToBooleansLSBFirst = byte => {
+const byteToBooleansLSBFirst = byte => {
     if (byte < 0 || byte > 255)
         throw new RangeError('Input must be a 1‑byte integer (0–255)');
     const bits = new Array(8);
@@ -14,7 +14,7 @@ export const byteToBooleansLSBFirst = byte => {
 };
 
 /* encoding detection (identical logic) */
-export const alphaBits = d =>
+const alphaBits = d =>
     (d & 0xc0) === 0
         ? (d & 0x0c) === 8
             ? 16
@@ -34,7 +34,7 @@ const _bcdNibbleToChar = n =>
         ? String(n)
         : ['*', '#', 'A', 'B', 'C', 'F'][n - 10] /* 0xF = filler */;
 
-export const semiPhone = bcd => {
+const semiPhone = bcd => {
     const digits = [];
     for (const byte of bcd) {
         digits.push(byte & 0x0f, (byte >> 4) & 0x0f);
@@ -46,7 +46,7 @@ export const semiPhone = bcd => {
 const bcdByteToNumber = b =>
     ((b >> 4) & 0x0F) * 10 + (b & 0x0F);   // 0x21 → 12
 
-export const tzDecode = tzByte => {
+const tzDecode = tzByte => {
     const high = (tzByte >> 4) & 0x0F;      // tens digit + sign
     const low  = tzByte & 0x0F;             // units digit
     const sign = (high & 0x8) ? '-' : '+';  // bit 3 set ⇒ negative
@@ -56,7 +56,7 @@ export const tzDecode = tzByte => {
     return `${sign}${hh}:${mm}`;
 };
 
-export const decodeTimestamp = bytes7 => {
+const decodeTimestamp = bytes7 => {
     if (bytes7.every(b => b === 0)) return undefined;
 
     const s = bytes7.map(b => ((b & 0x0F) << 4) | (b >> 4)); // swap nibbles once
@@ -86,7 +86,7 @@ const EXT = new Map([
     [0x40, '|'], [0x65, '€']
 ]);
 
-export const sevenBitDecode = (bytes, skip, septets) => {
+const sevenBitDecode = (bytes, skip, septets) => {
     let out = '',
         esc = false,
         bitPos = 0;
@@ -108,10 +108,10 @@ export const sevenBitDecode = (bytes, skip, septets) => {
     return out;
 };
 
-export const ucs2Decode = (bytes, skipOct) =>
+const ucs2Decode = (bytes, skipOct) =>
     new TextDecoder('utf-16be').decode(bytes.subarray(skipOct));
 
-export const octetDecode = (bytes, skipOct) =>
+const octetDecode = (bytes, skipOct) =>
     String.fromCharCode(...bytes.subarray(skipOct));
 
 /* Remove trailing 0xFF */
