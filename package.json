@@ -1,0 +1,29 @@
+{
+  "name": "siemens-sms-parser",
+  "version": "0.1.0",
+  "description": "Extract SMS messages from SMS.dat and .smo/.smi SMS Archive files on Siemens mobile phones.",
+  "keywords": [
+    "siemens",
+    "mobile",
+    "SMS",
+    "GSM-03.40",
+    "PDU"
+  ],
+  "homepage": "https://github.com/siemens-mobile-hacks/siemens-sms-parser#readme",
+  "bugs": {
+    "url": "https://github.com/siemens-mobile-hacks/siemens-sms-parser/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/siemens-mobile-hacks/siemens-sms-parser.git"
+  },
+  "license": "ISC",
+  "author": { "name": "Konstantin Pereiaslov", "url": "https://github.com/perk11" },
+  "type": "module",
+  "exports": { ".": "./sms-parser.js" },
+  "files": [
+    "sms-parser.js",
+    "cli.js"
+  ],
+  "bin": "cli.js"
+}
