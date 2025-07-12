@@ -2,7 +2,7 @@
 
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { SMSDatParser, SMSDecoder } from './sms-parser.js';
+import {formatTimestampToIsoWithOffset, SMSDatParser, SMSDecoder} from './sms-parser.js';
 
 const args   = process.argv.slice(2);
 const debug  = args.includes('--debug');
@@ -19,7 +19,7 @@ function formatOutput(decoded) {
     output += `Format: ${decoded.format}\n`;
     output += `Type: ${decoded.type}\n`;
     output += `Segments: ${decoded.segmentsStored}/${decoded.segmentsTotal}\n`;
-    if (decoded.timestamp !== undefined) output += `Date: ${decoded.timestamp}\n`;
+    if (decoded.dateAndTimeZoneOffset !== undefined) output += `Date: ${formatTimestampToIsoWithOffset(decoded.dateAndTimeZoneOffset.date, decoded.dateAndTimeZoneOffset.timeZoneOffsetMinutes)}\n`;
     output += `SMS Center: ${decoded.smsCenterNumber}\n`;
     if (decoded.recipient !== undefined) output += `Recipient: ${decoded.recipient}\n`;
     if (decoded.sender !== undefined) output += `Sender: ${decoded.sender}\n`;

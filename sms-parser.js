@@ -12,7 +12,40 @@ const byteToBooleansLSBFirst = byte => {
     for (let i = 0; i < 8; i++) bits[i] = Boolean((byte >> i) & 1);
     return bits;
 };
+export const formatTimestampToIsoWithOffset = function (dateOrTimestamp, customOffsetMinutes) {
+    const inputDate = dateOrTimestamp instanceof Date
+        ? new Date(dateOrTimestamp.getTime())
+        : new Date(dateOrTimestamp);
 
+    const utcMillis = inputDate.getTime();                      // absolute moment in time
+
+    let offsetMinutes;
+    let localDate;
+
+    if (typeof customOffsetMinutes === 'number') {
+        offsetMinutes = customOffsetMinutes;
+        localDate = new Date(utcMillis + offsetMinutes * 60_000); // shift into requested zone
+    } else {
+        localDate = inputDate;                                    // keep host zone
+        offsetMinutes = -localDate.getTimezoneOffset();           // JS offset sign is opposite of ISO-8601
+    }
+
+    const pad = (value, length = 2) => String(Math.abs(value)).padStart(length, '0');
+
+    const year    = localDate.getUTCFullYear();
+    const month   = pad(localDate.getUTCMonth() + 1);
+    const day     = pad(localDate.getUTCDate());
+    const hours   = pad(localDate.getUTCHours());
+    const minutes = pad(localDate.getUTCMinutes());
+    const seconds = pad(localDate.getUTCSeconds());
+
+    const sign            = offsetMinutes >= 0 ? '+' : '-';
+    const absOffset       = Math.abs(offsetMinutes);
+    const offsetHours     = pad(Math.floor(absOffset / 60));
+    const offsetRemaining = pad(absOffset % 60);
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${sign}${offsetHours}:${offsetRemaining}`;
+};
 /* encoding detection (identical logic) */
 const alphaBits = d =>
     (d & 0xc0) === 0
