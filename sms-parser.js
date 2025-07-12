@@ -480,6 +480,7 @@ export class SMSDatParser {
         const EXPECTED_HEADER =  Uint8Array.from([0x11, 0x11]);
 
         const segments = [];
+        let messageIndex = 0;
         while (cursor.remaining() >= 2) {
             const hdr = cursor.take(2);
             if (bytesEqual(hdr, NSG_EMPTY)) continue;
@@ -490,7 +491,11 @@ export class SMSDatParser {
                 console.warn('Incomplete PDU record in SMS.dat, attempting a partial read');
             const pdu = cursor.take(176);
             const decoded = new PDUDecoder().decodeSmsDat(pdu);
-            if (decoded !== undefined) segments.push(decoded);
+            if (decoded !== undefined) {
+                decoded.messageIndex = messageIndex;
+                segments.push(decoded);
+            }
+            messageIndex++;
         }
 
         /* Second pass: group and merge concatenated segments */
