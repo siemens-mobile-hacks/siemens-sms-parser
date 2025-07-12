@@ -55,16 +55,33 @@ const tzDecode = tzByte => {
     const mm   = String((qh % 4) * 15).padStart(2, '0');
     return `${sign}${hh}:${mm}`;
 };
-
-const decodeTimestamp = bytes7 => {
-    if (bytes7.every(b => b === 0)) return undefined;
-
-    const s = bytes7.map(b => ((b & 0x0F) << 4) | (b >> 4)); // swap nibbles once
+const sevenByteTimeStampToDateAndTimezoneOffset = bytes7 => {
+    const s = bytes7.map(b => ((b & 0x0F) << 4) | (b >> 4));
 
     const [yy, mo, dd, hh, mi, ss] = s.slice(0, 6).map(bcdByteToNumber);
-    return `20${String(yy).padStart(2,'0')}-${String(mo).padStart(2,'0')}-${String(dd).padStart(2,'0')} ` +
-        `${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')} ` +
-        tzDecode(s[6]);
+
+    const tzByte = s[6];
+    const high   = (tzByte >> 4) & 0x0F;
+    const low    = tzByte & 0x0F;
+    const quarterHours     = (high & 0x7) * 10 + low;
+    const timeZoneOffsetMinutes = quarterHours * 15 * ((high & 0x8) ? -1 : 1);
+    const timeZoneString = tzDecode(tzByte);
+
+    const utcMillis = Date.UTC(2000 + yy, mo - 1, dd, hh, mi, ss) - timeZoneOffsetMinutes * 60_000;
+
+    const date = new Date(utcMillis);
+
+    // *** step 3 (optional): stash the original printable string
+    date.originalTimestamp =
+        `20${String(yy).padStart(2, '0')}-` +
+        `${String(mo).padStart(2, '0')}-` +
+        `${String(dd).padStart(2, '0')} ` +
+        `${String(hh).padStart(2, '0')}:` +
+        `${String(mi).padStart(2, '0')}:` +
+        `${String(ss).padStart(2, '0')} ` +
+        tzDecode(tzByte);
+
+    return {date, timeZoneOffsetMinutes};
 };
 
 const DEF = [
@@ -194,8 +211,8 @@ export class PDUDecoder {
         const recipientLen = this.#cursor.takeByte();
         this.#cursor.takeByte(); // TOA
         const recipient = semiPhone(this.#cursor.take(Math.ceil(recipientLen / 2)));
-        const ts = decodeTimestamp(this.#cursor.take(7));
-        const dischargeTs = decodeTimestamp(this.#cursor.take(7));
+        const dateAndTimeZoneOffset = sevenByteTimeStampToDateAndTimezoneOffset(this.#cursor.take(7));
+        const dischargeDateAndTimeZoneOffset = sevenByteTimeStampToDateAndTimezoneOffset(this.#cursor.take(7));
         const status = this.#cursor.takeByte();
 
         return {
@@ -204,8 +221,8 @@ export class PDUDecoder {
             smsCenterNumber: scaNumber,
             messageRef: mr,
             recipient,
-            timestamp: ts,
-            dischargeTs,
+            dateAndTimeZoneOffset,
+            dischargeDateAndTimeZoneOffset,
             status
         };
     }
@@ -246,7 +263,7 @@ export class PDUDecoder {
         const dcs = this.#cursor.takeByte();
         const bitsPerChar = alphaBits(dcs);
 
-        let timestamp;
+        let dateAndTimeZoneOffset;
         /**
          * An SMS-SUBMIT TPDU may contain a TP-VP parameter which limits the time period for which the SMSC would attempt
          * to deliver the message. However, the validity period is usually limited globally by the SMSC configuration parameter
@@ -272,7 +289,7 @@ export class PDUDecoder {
                 validityPeriod = this.#cursor.takeByte();
             }
         } else {
-            timestamp = decodeTimestamp(this.#cursor.take(7));
+            dateAndTimeZoneOffset = sevenByteTimeStampToDateAndTimezoneOffset(this.#cursor.take(7));
         }
 
         const udl = this.#cursor.takeByte();
@@ -312,7 +329,7 @@ export class PDUDecoder {
 
         return isSubmit
             ? { ...common, type: 'Outgoing', recipient: phone, messageRef, validityPeriod }
-            : { ...common, type: 'Incoming', sender: phone, timestamp };
+            : { ...common, type: 'Incoming', sender: phone, dateAndTimeZoneOffset };
     }
 
     #decodeUserData(body, udhiPresent, bitsPerChar, udl) {
@@ -430,8 +447,8 @@ export class SMSDecoder {
         const segmentsStored = format.smsPartsOffset ? cursor.takeByte() : 0;
         const smsType = format.smsTypeOffset ? cursor.takeByte() : undefined;
         const smsStatus = format.smsStatusOffset ? cursor.takeByte() : undefined;
-        const timestamp = format.timestampOffset
-            ? decodeTimestamp(cursor.take(7))
+        const dateAndTimeZoneOffset = format.timestampOffset
+            ? sevenByteTimeStampToDateAndTimezoneOffset(cursor.take(7))
             : undefined;
 
         if (format.segmentStatusOffset - format.timestampOffset > 7)
@@ -458,7 +475,7 @@ export class SMSDecoder {
                     segmentsTotal,
                     segmentsStored
                 };
-                if (timestamp !== undefined) parsingResult.timestamp = timestamp;
+                if (dateAndTimeZoneOffset !== undefined) parsingResult.dateAndTimeZoneOffset = dateAndTimeZoneOffset;
                 if (smsType !== undefined) parsingResult.smsType = smsType;
                 if (smsStatus !== undefined) parsingResult.smsStatus = smsStatus;
             } else {

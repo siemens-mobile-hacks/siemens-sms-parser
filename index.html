@@ -60,13 +60,13 @@
 <div id="pickerContainer">
   <!-- Directory picker -->
   <label class="file-btn" for="dirInput">
-    <i class="fa-solid fa-folder-open"></i> Pick a directory with SMS Archive files
+    <i class="fa-solid fa-folder-open"></i> Pick a directory with SMS Archive/SMS.dat files
   </label>
   <input type="file" id="dirInput" webkitdirectory directory multiple />
 
   <!-- Single-file picker -->
   <label class="file-btn" for="fileInput">
-    <i class="fa-solid fa-file-import"></i> Pick a single SMS Archive file
+    <i class="fa-solid fa-file-import"></i> Pick a single SMS Archive/SMS.dat file
   </label>
   <input type="file" id="fileInput" />
 </div>
@@ -84,6 +84,40 @@
   const nl2br = (str) =>
           (str ?? '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g,'$1<br>$2');
 
+  const formatTimestampToIsoWithOffset = function (dateOrTimestamp, customOffsetMinutes) {
+    const inputDate = dateOrTimestamp instanceof Date
+            ? new Date(dateOrTimestamp.getTime())
+            : new Date(dateOrTimestamp);
+
+    const utcMillis = inputDate.getTime();                      // absolute moment in time
+
+    let offsetMinutes;
+    let localDate;
+
+    if (typeof customOffsetMinutes === 'number') {
+      offsetMinutes = customOffsetMinutes;
+      localDate = new Date(utcMillis + offsetMinutes * 60_000); // shift into requested zone
+    } else {
+      localDate = inputDate;                                    // keep host zone
+      offsetMinutes = -localDate.getTimezoneOffset();           // JS offset sign is opposite of ISO-8601
+    }
+
+    const pad = (value, length = 2) => String(Math.abs(value)).padStart(length, '0');
+
+    const year    = localDate.getUTCFullYear();
+    const month   = pad(localDate.getUTCMonth() + 1);
+    const day     = pad(localDate.getUTCDate());
+    const hours   = pad(localDate.getUTCHours());
+    const minutes = pad(localDate.getUTCMinutes());
+    const seconds = pad(localDate.getUTCSeconds());
+
+    const sign            = offsetMinutes >= 0 ? '+' : '-';
+    const absOffset       = Math.abs(offsetMinutes);
+    const offsetHours     = pad(Math.floor(absOffset / 60));
+    const offsetRemaining = pad(absOffset % 60);
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${sign}${offsetHours}:${offsetRemaining}`;
+  };
   /* Trigger parsing whenever files are chosen */
   fileInput.addEventListener("change", parseSelected);
   dirInput.addEventListener("change", parseSelected);
@@ -113,11 +147,8 @@
                   : msg.recipient || "Unknown";
 
           msg.file = file
-          const dateStr = msg.timestamp?.split(" ")[0] ?? "Unknown Date";
-
-          grouped[phone] ??= {};
-          grouped[phone][dateStr] ??= [];
-          grouped[phone][dateStr].push(msg);
+          grouped[phone] ??= [];
+          grouped[phone].push(msg);
         }
       }catch(e){
         console.error(`Failed to parse file ${file.name}:`, e);
@@ -135,31 +166,48 @@
     if(!phones.length) return "<p>No valid SMS data found.</p>";
 
     return phones.map(phone=>{
-      const dates = Object.keys(grouped[phone]).sort();
+      const messages = grouped[phone].sort(function (msg1, msg2) {
+        if (msg1.file.name === msg2.file.name && msg1.messageIndex !== undefined && msg2.messageIndex !== undefined) {
+          return msg1.messageIndex > msg2.messageIndex ? 1: -1;
+        }
+        if (msg1.dateAndTimeZoneOffset !== undefined && msg2.dateAndTimeZoneOffset !== undefined) {
+          return msg1.dateAndTimeZoneOffset.date > msg2.dateAndTimeZoneOffset.date ? 1 : -1;
+        }
+        if (msg1.dateAndTimeZoneOffset !== undefined && msg2.file.lastModified !== undefined) {
+          return msg1.dateAndTimeZoneOffset.date > msg2.file.lastModified ? 1 : -1;
+        }
+        if (msg1.file.lastModified !== undefined && msg2.dateAndTimeZoneOffset !== undefined) {
+          return msg1.file.lastModified > msg2.dateAndTimeZoneOffset.date ? 1 : -1;
+        }
+        if (msg1.file.lastModified !== undefined && msg2.file.lastModified !== undefined) {
+          return msg1.file.lastModified > msg2.file.lastModified ? 1 : -1;
+        }
+        return msg1.file.name.localeCompare(msg2.file.name);
+      });
       let phoneInner = "";
-      let totalMessages = 0;
+      messages.forEach(msg=>{
+        const cls = msg.type === "Incoming" ? "incoming" : "outgoing";
+        let fileMtime = '';
+        if (msg.file.lastModified !== undefined) {
+          fileMtime = ' (File modtime: ' + formatTimestampToIsoWithOffset(msg.file.lastModified) + ')';
+        }
+        let messageTime = 'Unknow date';
+        if (msg.dateAndTimeZoneOffset !== undefined) {
+          messageTime = formatTimestampToIsoWithOffset(msg.dateAndTimeZoneOffset.date, msg.dateAndTimeZoneOffset.timeZoneOffsetMinutes);
+        }
 
-      dates.forEach(dateStr=>{
-        const messages = grouped[phone][dateStr]
-                .sort((a,b)=>new Date(a.timestamp) - new Date(b.timestamp));
-
-        totalMessages += messages.length;
-        phoneInner += `<div class="date-header">${dateStr}</div>`;
-        messages.forEach(msg=>{
-          const cls = msg.type === "Incoming" ? "incoming" : "outgoing";
-          phoneInner += `
-            <div class="message ${cls}">
-              <strong>${msg.type}</strong> – ${msg.timestamp || ""} <strong>${msg.file.webkitRelativePath || msg.file.name}</strong><br/>
-              <em>${msg.encoding}</em> – SMSC: ${msg.smsCenterNumber || "N/A"}<br/>
-              <div>${nl2br(msg.text)}</div>
-            </div>`;
-        });
+        phoneInner += `
+          <div class="message ${cls}">
+            <strong>${msg.type}</strong> – ${messageTime} <strong>${msg.file.webkitRelativePath || msg.file.name}${msg.messageIndex === undefined ? '' : '#' + msg.messageIndex}</strong>${fileMtime}<br/>
+            <em>${msg.encoding}</em> – SMSC: ${msg.smsCenterNumber || "N/A"}<br/>
+            <div>${nl2br(msg.text)}</div>
+          </div>`;
       });
 
-      const openAttr = totalMessages <= 10 ? " open" : "";
+      const openAttr = messages.length <= 10 ? " open" : "";
       return `
         <details${openAttr}>
-          <summary>Messages with: ${phone} (${totalMessages})</summary>
+          <summary>Messages with: ${phone} (${messages.length})</summary>
           ${phoneInner}
         </details>`;
     }).join("");
