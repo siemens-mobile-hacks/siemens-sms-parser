@@ -128,7 +128,6 @@
     document.querySelector('body').classList.add("loading");
     const grouped = {};
 
-    /* --- Decode every file --- */
     for (const file of files){
       try{
         const arrayBuffer = await file.arrayBuffer();
@@ -167,11 +166,11 @@
 
     return phones.map(phone=>{
       const messages = grouped[phone].sort(function (msg1, msg2) {
-        if (msg1.file.name === msg2.file.name && msg1.messageIndex !== undefined && msg2.messageIndex !== undefined) {
-          return msg1.messageIndex > msg2.messageIndex ? 1: -1;
-        }
         if (msg1.dateAndTimeZoneOffset !== undefined && msg2.dateAndTimeZoneOffset !== undefined) {
           return msg1.dateAndTimeZoneOffset.date > msg2.dateAndTimeZoneOffset.date ? 1 : -1;
+        }
+        if (msg1.file.name === msg2.file.name && msg1.messageIndex !== undefined && msg2.messageIndex !== undefined) {
+          return msg1.messageIndex > msg2.messageIndex ? 1: -1;
         }
         if (msg1.dateAndTimeZoneOffset !== undefined && msg2.file.lastModified !== undefined) {
           return msg1.dateAndTimeZoneOffset.date > msg2.file.lastModified ? 1 : -1;
