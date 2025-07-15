@@ -89,6 +89,7 @@ const tzDecode = tzByte => {
     return `${sign}${hh}:${mm}`;
 };
 const sevenByteTimeStampToDateAndTimezoneOffset = bytes7 => {
+    if (bytes7.every(b => b === 0x00)) return undefined;
     const s = bytes7.map(b => ((b & 0x0F) << 4) | (b >> 4));
 
     const [yy, mo, dd, hh, mi, ss] = s.slice(0, 6).map(bcdByteToNumber);
