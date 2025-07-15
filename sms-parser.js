@@ -509,7 +509,7 @@ export class SMSDecoder {
             if (parsingResult === undefined) {
                 parsingResult = {
                     ...decodedPdu,
-                    format,
+                    format: formatName,
                     segmentsTotal,
                     segmentsStored
                 };
