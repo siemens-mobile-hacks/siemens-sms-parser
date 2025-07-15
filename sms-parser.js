@@ -489,9 +489,13 @@ export class SMSDecoder {
 
         let parsingResult;
         for (let part = 0; part < segmentsTotal; part++) {
-            if (cursor.remaining() < 176)
+            let pdu;
+            if (cursor.remaining() < 176) {
                 console.warn(`Segment ${part + 1} incomplete – decoding anyway`);
-            let pdu = cursor.take(176);
+                pdu = cursor.take(cursor.remaining());
+            } else {
+                pdu = cursor.take(176);
+            }
 
             if (format.segmentStatusOffset) {
                 // first byte is segment status – strip it
