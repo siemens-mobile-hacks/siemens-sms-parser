@@ -289,9 +289,14 @@ export class PDUDecoder {
         const addrToa = this.#cursor.takeByte();
         const addrRaw = this.#cursor.take(Math.ceil(addrLen / 2));
         const isAlpha = (addrToa & 0x70) === 0x50;
-        const phone = isAlpha
-            ? sevenBitDecode(addrRaw, 0, addrLen)
-            : semiPhone(addrRaw);
+        let phone;
+        if (isAlpha) {
+            const alphaRaw = sevenBitDecode(addrRaw, 0, addrLen);
+            phone = alphaRaw.replace(/@+$/, '');
+        } else {
+            phone = semiPhone(addrRaw);
+        }
+
 
         const pid = this.#cursor.takeByte();
         const dcs = this.#cursor.takeByte();
