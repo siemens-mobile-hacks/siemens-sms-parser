@@ -195,13 +195,13 @@ class ByteCursor {
     }
 }
 export class UserData {
-    referenceNumber   = undefined;   // integer (0-255 or 0-65535)
-    segmentsTotal     = undefined;   // integer 1-255
-    sequenceNumber    = undefined;   // integer 1-255
-    encoding          = undefined;   // 'GSM-7' | 'ASCII' | 'UCS-2'
-    text              = undefined;   // string
-    length            = undefined;   // non-negative integer
-
+    referenceNumber = undefined;   // integer (0-255 or 0-65535)
+    segmentsTotal = undefined;   // integer 1-255
+    sequenceNumber = undefined;   // integer 1-255
+    encoding = undefined;   // 'GSM-7' | 'ASCII' | 'UCS-2'
+    text = undefined;   // string
+    length = undefined;   // non-negative integer
+    errors=[];
     constructor() {
         Object.seal(this);           // ban undeclared props, keep mutability
     }
@@ -257,22 +257,31 @@ class UserDataDecoder {
         const iedl = this.#cursor.takeByte();
         let bytesRead = 2;
 
-        if ((iei === 0x00 && iedl === 0x03) || (iei === 0x08 && iedl === 0x04)) {
-            const referenceOctets = iei === 0x08 ? 2 : 1;
-            const refBytes = this.#cursor.take(referenceOctets);
-            bytesRead += referenceOctets;
+        switch (iei) {
+            case 0x00: //Concatenated short messages, 8-bit reference number
+            case 0x08: //Concatenated short message, 16-bit reference number
+                const referenceOctets = iei === 0x08 ? 2 : 1;
+                if ((iei === 0x00 && iedl !== 0x03) || (iei === 0x08 && iedl !== 0x04)) {
+                    this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
+                    return iedl+2;
+                }
+                const refBytes = this.#cursor.take(referenceOctets);
+                bytesRead += referenceOctets;
 
-            this.#decodedUserData.referenceNumber = referenceOctets === 2
-                ? (refBytes[0] << 8) | refBytes[1]
-                : refBytes[0];
+                this.#decodedUserData.referenceNumber = referenceOctets === 2
+                    ? (refBytes[0] << 8) | refBytes[1]
+                    : refBytes[0];
 
-            this.#decodedUserData.segmentsTotal = this.#cursor.takeByte();
-            this.#decodedUserData.sequenceNumber = this.#cursor.takeByte();
-            bytesRead += 2;
-        } else {
+                this.#decodedUserData.segmentsTotal = this.#cursor.takeByte();
+                this.#decodedUserData.sequenceNumber = this.#cursor.takeByte();
+                bytesRead += 2;
+                break;
+        default:
+            this.#decodedUserData.errors.push(`Message contains an unsupported Information Element: ${iei.toString(16).padStart(2, '0')}`);
             this.#cursor.take(iedl);
             bytesRead += iedl; // skip unknown IE
         }
+
         return bytesRead;
     }
 }
@@ -412,29 +421,16 @@ export class PDUDecoder {
         }
 
         const udBody = this.#cursor.take(this.#cursor.remaining()); // rest of buffer
-        const {
-            udh,
-            referenceNumber,
-            segmentsTotal,
-            sequenceNumber,
-            encoding,
-            text,
-            length
-        } = new UserDataDecoder().decode(udBody, udhiPresent, bitsPerChar);
+        const userData = new UserDataDecoder().decode(udBody, udhiPresent, bitsPerChar);
 
         const common = {
+
             firstOctet,
             udhiPresent,
             pid,
             dcs,
             classDesc: dcs & 0x10 ? `class ${(dcs & 3)}` : '',
-            udh,
-            referenceNumber,
-            segmentsTotal,
-            sequenceNumber,
-            length,
-            text,
-            encoding
+            ...userData,
         };
 
         return isSubmit
@@ -614,6 +610,7 @@ export class SMSDatParser {
             merged.segmentsStored = 0;
             merged.legnth = 0;
             merged.text = '';
+            merged.errors = [];
             for (const part of parts) {
                 if (part === undefined) {
                     merged.text += '<missing segment>';
@@ -621,6 +618,7 @@ export class SMSDatParser {
                     merged.segmentsStored++;
                     merged.length += part.length;
                     merged.text += part.text;
+                    merged.errors = [...merged.errors, ...part.errors];
                 }
             }
             concatenatedMessages.push(merged);

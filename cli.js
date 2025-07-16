@@ -16,6 +16,7 @@ if (!target) {
 
 function formatOutput(decoded) {
     let output = '';
+    if (decoded.errors.length > 0) output += `Errors:\n    ${decoded.errors.join("\n    ")}\n`;
     output += `Format: ${decoded.format}\n`;
     output += `Type: ${decoded.type}\n`;
     output += `Segments: ${decoded.segmentsStored}/${decoded.segmentsTotal}\n`;
