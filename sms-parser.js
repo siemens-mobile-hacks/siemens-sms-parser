@@ -137,10 +137,9 @@ const EXT = new Map([
     [0x40, '|'], [0x65, '€']
 ]);
 
-const sevenBitDecode = (bytes, skip, septets) => {
+const sevenBitDecode = (bytes, bitPos, septets) => {
     let out = '',
-        esc = false,
-        bitPos = 0;
+        esc = false;
 
     for (let i = 0; i < septets; i++) {
         const bytePos = Math.floor(bitPos / 8);
@@ -148,7 +147,6 @@ const sevenBitDecode = (bytes, skip, septets) => {
         const b2 = bytes[bytePos + 1] ?? 0;
         const v = ((b1 >> (bitPos % 8)) | (b2 << (8 - (bitPos % 8)))) & 0x7f;
         bitPos += 7;
-        if (i < skip) continue;
 
         if (esc) {
             out += EXT.get(v) || '�';
@@ -194,6 +192,82 @@ class ByteCursor {
     }
     remaining() {
         return this.b.length - this.i;
+    }
+}
+
+class UserDataDecoder {
+    #cursor;
+
+    decode(userData, udhiPresent, bitsPerChar) {
+        this.#cursor = new ByteCursor(userData);
+        //TP‑User‑Data‑Length = total length of the TP‑User‑Data field including the Header
+        const udl = this.#cursor.takeByte();
+        let referenceNumber, segmentsTotal, sequenceNumber, isReference16Bit;
+        isReference16Bit = bitsPerChar === 16;
+        let udhl = 0;
+        if (udhiPresent) {
+            udhl = this.#cursor.takeByte();
+            let headerBytesRead = 0;
+            while (headerBytesRead < udhl) {
+                const iei = this.#cursor.takeByte();
+                headerBytesRead += 1;
+                const iedl = this.#cursor.takeByte();
+                headerBytesRead += 1;
+
+                if ((iei === 0x00 && iedl === 0x03) || (iei === 0x08 && iedl === 0x04)) {
+                    const referenceOctets = iei === 0x08 ? 2 : 1;
+                    const refBytes = this.#cursor.take(referenceOctets);
+                    headerBytesRead += referenceOctets;
+
+                    referenceNumber = referenceOctets === 2
+                        ? (refBytes[0] << 8) | refBytes[1]
+                        : refBytes[0];
+
+                    segmentsTotal = this.#cursor.takeByte();
+                    headerBytesRead += 1;
+                    sequenceNumber = this.#cursor.takeByte();
+                    headerBytesRead += 1;
+                    isReference16Bit = iei === 0x08;
+                } else {
+                    this.#cursor.take(iedl);
+                    headerBytesRead += iedl; // skip unknown IE
+                }
+            }
+        }
+        let smData = this.#cursor.take(this.#cursor.remaining());
+        const headerOctetCount = udhiPresent ? udhl + 1 : 0;
+        let encoding, text, length;
+        switch (bitsPerChar) {
+            case 16:
+                encoding = 'UCS-2';
+                text = ucs2Decode(smData, 0);
+                length = (udl - headerOctetCount) / 2
+                break;
+            case 8:
+                encoding = 'ASCII';
+                text = octetDecode(smData, 0);
+                length = (udl - headerOctetCount) / 2
+                break;
+            case 7:
+                encoding = 'GSM-7';
+                const bitOffset = (7 - (headerOctetCount % 7)) % 7; // 0-6 pad bits
+                const headerSeptetCount = (headerOctetCount * 8 + bitOffset) / 7;      // always integer
+                length  = udl - headerSeptetCount;
+                text = sevenBitDecode(smData, bitOffset, length);
+                break;
+            default:
+                throw new Error(`Unknown number of bits: ${bitsPerChar}`);
+        }
+
+        return {
+            referenceNumber,
+            segmentsTotal,
+            sequenceNumber,
+            isReference16Bit,
+            encoding,
+            text,
+            length,
+        };
     }
 }
 
@@ -332,7 +406,6 @@ export class PDUDecoder {
         }
 
         const udBody = this.#cursor.take(this.#cursor.remaining()); // rest of buffer
-
         const {
             udh,
             referenceNumber,
@@ -342,11 +415,7 @@ export class PDUDecoder {
             encoding,
             text,
             length
-        } = this.#decodeUserData(
-            udBody,
-            udhiPresent,
-            bitsPerChar,
-        );
+        } = new UserDataDecoder().decode(udBody, udhiPresent, bitsPerChar);
 
         const common = {
             firstOctet,
@@ -370,68 +439,7 @@ export class PDUDecoder {
     }
 
     #decodeUserData(body, udhiPresent, bitsPerChar) {
-        //TP‑User‑Data‑Length = total length of the TP‑User‑Data field including the Header
-        const udl = body[0];
-        body = body.subarray(1);
-        let skipOct = 0;
-        let userDataHeaderBytes = new Uint8Array(0);
-        let referenceNumber, segmentsTotal, sequenceNumber, isReference16Bit;
-        if (udhiPresent) {
-            const udhl = body[0];
-            userDataHeaderBytes = body.subarray(0, udhl + 1);
-            skipOct = udhl + 1;
-            let currentByte = 1;// Start after the UDH length octet (index 0)
-            const informationElementIdentifier = userDataHeaderBytes[currentByte++];
-            const informationElementDataLength = userDataHeaderBytes[currentByte++];
 
-            const is8BitConcat = informationElementIdentifier === 0x00 && informationElementDataLength === 0x03;
-            const is16BitConcat = informationElementIdentifier === 0x08 && informationElementDataLength === 0x04;
-
-            if (is8BitConcat || is16BitConcat) {
-                isReference16Bit = is16BitConcat;
-
-                referenceNumber = isReference16Bit
-                    ? (userDataHeaderBytes[currentByte] << 8) | userDataHeaderBytes[currentByte + 1]
-                    : userDataHeaderBytes[currentByte];
-
-                const referenceNumberOctetCount = isReference16Bit ? 2 : 1;
-
-                segmentsTotal = userDataHeaderBytes[currentByte + referenceNumberOctetCount];
-                sequenceNumber = userDataHeaderBytes[currentByte + referenceNumberOctetCount + 1];
-            }
-        }
-
-        let encoding, text;
-        switch (bitsPerChar) {
-            case 16:
-                encoding = 'UCS-2';
-                text = ucs2Decode(body, skipOct);
-                break;
-            case 8:
-                encoding = 'ASCII';
-                text = octetDecode(body, skipOct);
-                break;
-            case 7:
-                encoding = 'GSM-7';
-                text = sevenBitDecode(body, Math.ceil(skipOct * 8 / 7), udl);
-                break;
-            default:
-                throw new Error(`Unknown number of bits: ${bitsPerChar}`);
-        }
-
-        const length =
-            bitsPerChar === 16 ? (body.length - skipOct) / 2 : udl - skipOct;
-
-        return {
-            udh: bytesToHex(userDataHeaderBytes),
-            referenceNumber,
-            segmentsTotal,
-            sequenceNumber,
-            isReference16Bit,
-            encoding,
-            text,
-            length
-        };
     }
 }
 
