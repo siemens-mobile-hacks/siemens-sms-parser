@@ -166,7 +166,7 @@
           <div class="message ${cls}">
             <strong>${msg.type}</strong> – ${messageTime} <strong>${msg.file.webkitRelativePath || msg.file.name}${msg.messageIndex === undefined ? '' : '#' + msg.messageIndex}</strong>${fileMtime}<br/>
             <em>${msg.encoding}</em> – SMSC: ${msg.smsCenterNumber || "N/A"}<br/>
-            <div>${htmlRenderer.renderMessageContents(msg)}</div>
+            <div>${msg.html}</div>
           </div>`;
       });
 

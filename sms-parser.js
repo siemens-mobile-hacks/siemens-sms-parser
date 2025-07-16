@@ -591,6 +591,7 @@ function mergeSegments(segments) {
             console.warn(`Duplicate segment ${segment.sequenceNumber} of ${segment.referenceNumber} from ${peer}`);
         }
     }
+    const htmlRenderer = new HTMLRenderer();
 
     // Assemble buckets whose part list is complete
     for (const {first, total, parts} of multipartBuckets.values()) {
@@ -602,6 +603,7 @@ function mergeSegments(segments) {
         merged.segmentsStored = 0;
         merged.legnth = 0;
         merged.text = '';
+        merged.html = '';
         merged.errors = [];
         for (const part of parts) {
             if (part === undefined) {
@@ -610,6 +612,7 @@ function mergeSegments(segments) {
                 merged.segmentsStored++;
                 merged.length += part.length;
                 merged.text += part.text;
+                merged.html += htmlRenderer.renderSegment(part);
                 merged.errors = [...merged.errors, ...part.errors];
             }
         }
@@ -671,9 +674,9 @@ export class HTMLRenderer  {
     #nl2br = (str) =>
         (str ?? '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g,'$1<br>$2');
 
-    renderMessageContents(message) {
+    renderSegment(segment) {
         let insertions = [];
-        for (const predefinedAnimation of message.predefinedAnimations) {
+        for (const predefinedAnimation of segment.predefinedAnimations) {
             let text;
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
                 text = '<Incorrect predefined animation>';
@@ -687,7 +690,7 @@ export class HTMLRenderer  {
         }
         insertions = insertions.sort((a, b) => a.position - b.position);
         let cumulativeOffset = 0;
-        let resultingText = message.text;
+        let resultingText = segment.text;
         for (const { position, text } of insertions) {
             const targetIndex = position + cumulativeOffset;
             resultingText =
