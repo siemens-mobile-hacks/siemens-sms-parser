@@ -331,7 +331,6 @@ export class PDUDecoder {
             dateAndTimeZoneOffset = sevenByteTimeStampToDateAndTimezoneOffset(this.#cursor.take(7));
         }
 
-        const udl = this.#cursor.takeByte();
         const udBody = this.#cursor.take(this.#cursor.remaining()); // rest of buffer
 
         const {
@@ -347,7 +346,6 @@ export class PDUDecoder {
             udBody,
             udhiPresent,
             bitsPerChar,
-            udl
         );
 
         const common = {
@@ -371,7 +369,10 @@ export class PDUDecoder {
             : { ...common, type: 'Incoming', sender: phone, dateAndTimeZoneOffset };
     }
 
-    #decodeUserData(body, udhiPresent, bitsPerChar, udl) {
+    #decodeUserData(body, udhiPresent, bitsPerChar) {
+        //TP‑User‑Data‑Length = total length of the TP‑User‑Data field including the Header
+        const udl = body[0];
+        body = body.subarray(1);
         let skipOct = 0;
         let userDataHeaderBytes = new Uint8Array(0);
         let referenceNumber, segmentsTotal, sequenceNumber, isReference16Bit;
