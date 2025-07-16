@@ -559,6 +559,66 @@ export class SMSDecoder {
     }
 }
 
+function mergeSegments(segments) {
+    const multipartBuckets = new Map(); // key → {meta, parts[]}
+
+    const concatenatedMessages = [];
+    for (const segment of segments) {
+        if (segment.referenceNumber === undefined || segment.segmentsTotal === 1) { // plain single‑segment SMS
+            segment.segmentsTotal = 1
+            segment.segmentsStored = 1
+            concatenatedMessages.push(segment);
+            continue;
+        }
+
+        // Use sender/recipient + ref as bucket key
+        const peer = segment.sender ?? segment.recipient;
+        const dir = segment.sender ? 'IN' : 'OUT';
+        const key = `${dir}:${peer}:${segment.referenceNumber}`;
+
+        let bucket = multipartBuckets.get(key);
+        if (bucket === undefined) {
+            bucket = {
+                first: segment,
+                total: segment.segmentsTotal,
+                parts: new Array(segment.segmentsTotal).fill(undefined)
+            };
+            multipartBuckets.set(key, bucket);
+        }
+        if (bucket.parts[segment.sequenceNumber - 1] === undefined) {
+            bucket.parts[segment.sequenceNumber - 1] = segment;
+        } else {
+            console.warn(`Duplicate segment ${segment.sequenceNumber} of ${segment.referenceNumber} from ${peer}`);
+        }
+    }
+
+    // Assemble buckets whose part list is complete
+    for (const {first, total, parts} of multipartBuckets.values()) {
+        const merged = {...first}; // shallow clone
+        merged.referenceNumber = first.referenceNumber;
+        merged.totalSegments = total;
+        merged.sequenceNumber = 1;
+
+        merged.segmentsStored = 0;
+        merged.legnth = 0;
+        merged.text = '';
+        merged.errors = [];
+        for (const part of parts) {
+            if (part === undefined) {
+                merged.text += '<missing segment>';
+            } else {
+                merged.segmentsStored++;
+                merged.length += part.length;
+                merged.text += part.text;
+                merged.errors = [...merged.errors, ...part.errors];
+            }
+        }
+        concatenatedMessages.push(merged);
+    }
+
+    return concatenatedMessages;
+}
+
 export class SMSDatParser {
     decode(buf) {
         const b = buf instanceof Uint8Array ? buf : Uint8Array.from(buf);
@@ -587,64 +647,7 @@ export class SMSDatParser {
             messageIndex++;
         }
 
-        /* Second pass: group and merge concatenated segments */
-        const multipartBuckets = new Map(); // key → {meta, parts[]}
-
-        const concatenatedMessages = [];
-        for (const segment of segments) {
-            if (segment.referenceNumber === undefined || segment.segmentsTotal === 1) { // plain single‑segment SMS
-                segment.segmentsTotal = 1
-                segment.segmentsStored = 1
-                concatenatedMessages.push(segment);
-                continue;
-            }
-
-            // Use sender/recipient + ref as bucket key
-            const peer = segment.sender ?? segment.recipient;
-            const dir = segment.sender ? 'IN' : 'OUT';
-            const key = `${dir}:${peer}:${segment.referenceNumber}`;
-
-            let bucket = multipartBuckets.get(key);
-            if (bucket === undefined) {
-                bucket = {
-                    first: segment,
-                    total: segment.segmentsTotal,
-                    parts: new Array(segment.segmentsTotal).fill(undefined)
-                };
-                multipartBuckets.set(key, bucket);
-            }
-            if (bucket.parts[segment.sequenceNumber - 1] === undefined) {
-                bucket.parts[segment.sequenceNumber - 1] = segment;
-            } else {
-                console.warn(`Duplicate segment ${segment.sequenceNumber} of ${segment.referenceNumber} from ${peer}`);
-            }
-        }
-
-        // Assemble buckets whose part list is complete
-        for (const {first, total, parts} of multipartBuckets.values()) {
-            const merged = {...first}; // shallow clone
-            merged.referenceNumber = first.referenceNumber;
-            merged.totalSegments = total;
-            merged.sequenceNumber = 1;
-
-            merged.segmentsStored = 0;
-            merged.legnth = 0;
-            merged.text = '';
-            merged.errors = [];
-            for (const part of parts) {
-                if (part === undefined) {
-                    merged.text += '<missing segment>';
-                } else {
-                    merged.segmentsStored++;
-                    merged.length += part.length;
-                    merged.text += part.text;
-                    merged.errors = [...merged.errors, ...part.errors];
-                }
-            }
-            concatenatedMessages.push(merged);
-        }
-
-        return concatenatedMessages;
+        return mergeSegments(segments);
     }
 }
 const predefinedAnimations = [
@@ -675,7 +678,7 @@ export class HTMLRenderer  {
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
                 text = '<Incorrect predefined animation>';
             } else  {
-                text = `<img class="predefined-animation" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt=""{predefinedAnimations[predefinedAnimation.animationNumber]}">`;
+                text = `<img class="predefined-animation" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
             }
             insertions.push({
                 position: predefinedAnimation.position,
