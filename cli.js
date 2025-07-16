@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import {promises as fs} from 'node:fs';
+import {join, resolve} from 'node:path';
 import {formatTimestampToIsoWithOffset, SMSDatParser, SMSDecoder} from './sms-parser.js';
 
 const args   = process.argv.slice(2);
@@ -28,7 +28,11 @@ function formatOutput(decoded) {
     output += `Ref: ${decoded.messageRef}\n`;
     output += `Length: ${decoded.length}\n`;
     output += `Text: ${decoded.text}\n`;
+    if (debug) {
+        output += `HTML:\n`;
+    }
 
+    decoded.html.split('\n').forEach(line => output += `    ${line}\n`);
     return output;
 }
 
