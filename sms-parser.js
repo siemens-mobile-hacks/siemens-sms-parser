@@ -194,7 +194,16 @@ class ByteCursor {
         return this.b.length - this.i;
     }
 }
-export class UserData {
+class PredefinedAnimation {
+    position;
+    animationNumber;
+    constructor(position, animationNumber) {
+        this.position = position;
+        this.animationNumber = animationNumber;
+        Object.freeze(this);
+    }
+}
+class UserData {
     referenceNumber = undefined;   // integer (0-255 or 0-65535)
     segmentsTotal = undefined;   // integer 1-255
     sequenceNumber = undefined;   // integer 1-255
@@ -202,6 +211,8 @@ export class UserData {
     text = undefined;   // string
     length = undefined;   // non-negative integer
     errors=[];
+    /** @type Array.<PredefinedAnimation> */
+    predefinedAnimations = [];
     constructor() {
         Object.seal(this);           // ban undeclared props, keep mutability
     }
@@ -263,7 +274,7 @@ class UserDataDecoder {
                 const referenceOctets = iei === 0x08 ? 2 : 1;
                 if ((iei === 0x00 && iedl !== 0x03) || (iei === 0x08 && iedl !== 0x04)) {
                     this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
-                    return iedl+2;
+                    return iedl;
                 }
                 const refBytes = this.#cursor.take(referenceOctets);
                 bytesRead += referenceOctets;
@@ -275,6 +286,15 @@ class UserDataDecoder {
                 this.#decodedUserData.segmentsTotal = this.#cursor.takeByte();
                 this.#decodedUserData.sequenceNumber = this.#cursor.takeByte();
                 bytesRead += 2;
+                break;
+            case 0x0D: //predefined animation
+                if (iedl !== 0x02) {
+                    this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
+                    return iedl;
+                }
+                let animation = new PredefinedAnimation(this.#cursor.takeByte(), this.#cursor.takeByte());
+                bytesRead += 2;
+                this.#decodedUserData.predefinedAnimations.push(animation);
                 break;
         default:
             this.#decodedUserData.errors.push(`Message contains an unsupported Information Element: ${iei.toString(16).padStart(2, '0')}`);
@@ -625,5 +645,55 @@ export class SMSDatParser {
         }
 
         return concatenatedMessages;
+    }
+}
+const predefinedAnimations = [
+    'I am ironic, flirty',
+    'I am glad',
+    'I am sceptic',
+    'I am sad',
+    'WOW!',
+    'I am crying',
+    'I am winking',
+    'I am laughing',
+    'I am indifferent',
+    'In love/Kissing',
+    'I am confused',
+    'Tongue hanging out',
+    'I am angry',
+    'Wearing glasses',
+    'Devil'
+];
+export class HTMLRenderer  {
+    #nl2br = (str) =>
+        (str ?? '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g,'$1<br>$2');
+
+    renderMessageContents(message) {
+        let insertions = [];
+        for (const predefinedAnimation of message.predefinedAnimations) {
+            let text;
+            if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
+                text = '<Incorrect predefined animation>';
+            } else  {
+                text = `<img class="predefined-animation" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt=""{predefinedAnimations[predefinedAnimation.animationNumber]}">`;
+            }
+            insertions.push({
+                position: predefinedAnimation.position,
+                text,
+            });
+        }
+        insertions = insertions.sort((a, b) => a.position - b.position);
+        let cumulativeOffset = 0;
+        let resultingText = message.text;
+        for (const { position, text } of insertions) {
+            const targetIndex = position + cumulativeOffset;
+            resultingText =
+                resultingText.slice(0, targetIndex) +
+                text +
+                resultingText.slice(targetIndex);
+            cumulativeOffset += text.length;
+        }
+
+        return this.#nl2br(resultingText);
     }
 }

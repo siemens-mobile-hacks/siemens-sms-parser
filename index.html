@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lag="en">
 <head>
   <meta charset="UTF-8" />
   <title>Siemens SMS Archive Parser</title>
@@ -52,6 +52,9 @@
       transition:transform .2s;
     }
     details[open] summary::before{transform:rotate(90deg);}
+    .predefined-animation {
+      width: 80px;
+    }
   </style>
 </head>
 <body>
@@ -74,15 +77,12 @@
 <div id="resultsContainer"></div>
 
 <script type="module">
-  import { SMSDecoder, SMSDatParser, formatTimestampToIsoWithOffset } from './sms-parser.js';
+  import { SMSDecoder, SMSDatParser, HTMLRenderer, formatTimestampToIsoWithOffset } from './sms-parser.js';
 
   const fileInput  = document.getElementById("fileInput");
   const dirInput   = document.getElementById("dirInput");
   const resultsDiv = document.getElementById("resultsContainer");
 
-  /* Keep <br>s in message bodies */
-  const nl2br = (str) =>
-          (str ?? '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g,'$1<br>$2');
 
   /* Trigger parsing whenever files are chosen */
   fileInput.addEventListener("change", parseSelected);
@@ -126,6 +126,7 @@
 
   /* --- Build the result HTML --- */
   function renderGrouped(grouped){
+    const htmlRenderer = new HTMLRenderer();
     const phones = Object.keys(grouped)
             .sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
     if(!phones.length) return "<p>No valid SMS data found.</p>";
@@ -165,7 +166,7 @@
           <div class="message ${cls}">
             <strong>${msg.type}</strong> – ${messageTime} <strong>${msg.file.webkitRelativePath || msg.file.name}${msg.messageIndex === undefined ? '' : '#' + msg.messageIndex}</strong>${fileMtime}<br/>
             <em>${msg.encoding}</em> – SMSC: ${msg.smsCenterNumber || "N/A"}<br/>
-            <div>${nl2br(msg.text)}</div>
+            <div>${htmlRenderer.renderMessageContents(msg)}</div>
           </div>`;
       });
 
