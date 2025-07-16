@@ -194,80 +194,86 @@ class ByteCursor {
         return this.b.length - this.i;
     }
 }
+export class UserData {
+    referenceNumber   = undefined;   // integer (0-255 or 0-65535)
+    segmentsTotal     = undefined;   // integer 1-255
+    sequenceNumber    = undefined;   // integer 1-255
+    encoding          = undefined;   // 'GSM-7' | 'ASCII' | 'UCS-2'
+    text              = undefined;   // string
+    length            = undefined;   // non-negative integer
 
+    constructor() {
+        Object.seal(this);           // ban undeclared props, keep mutability
+    }
+}
 class UserDataDecoder {
     #cursor;
+    #decodedUserData;
 
     decode(userData, udhiPresent, bitsPerChar) {
         this.#cursor = new ByteCursor(userData);
+        this.#decodedUserData = new UserData();
+
         //TP‑User‑Data‑Length = total length of the TP‑User‑Data field including the Header
         const udl = this.#cursor.takeByte();
-        let referenceNumber, segmentsTotal, sequenceNumber, isReference16Bit;
-        isReference16Bit = bitsPerChar === 16;
         let udhl = 0;
         if (udhiPresent) {
             udhl = this.#cursor.takeByte();
             let headerBytesRead = 0;
             while (headerBytesRead < udhl) {
-                const iei = this.#cursor.takeByte();
-                headerBytesRead += 1;
-                const iedl = this.#cursor.takeByte();
-                headerBytesRead += 1;
-
-                if ((iei === 0x00 && iedl === 0x03) || (iei === 0x08 && iedl === 0x04)) {
-                    const referenceOctets = iei === 0x08 ? 2 : 1;
-                    const refBytes = this.#cursor.take(referenceOctets);
-                    headerBytesRead += referenceOctets;
-
-                    referenceNumber = referenceOctets === 2
-                        ? (refBytes[0] << 8) | refBytes[1]
-                        : refBytes[0];
-
-                    segmentsTotal = this.#cursor.takeByte();
-                    headerBytesRead += 1;
-                    sequenceNumber = this.#cursor.takeByte();
-                    headerBytesRead += 1;
-                    isReference16Bit = iei === 0x08;
-                } else {
-                    this.#cursor.take(iedl);
-                    headerBytesRead += iedl; // skip unknown IE
-                }
+                const bytesRead = this.readInformationElement();
+                headerBytesRead += bytesRead;
             }
         }
         let smData = this.#cursor.take(this.#cursor.remaining());
         const headerOctetCount = udhiPresent ? udhl + 1 : 0;
-        let encoding, text, length;
         switch (bitsPerChar) {
             case 16:
-                encoding = 'UCS-2';
-                text = ucs2Decode(smData, 0);
-                length = (udl - headerOctetCount) / 2
+                this.#decodedUserData.encoding = 'UCS-2';
+                this.#decodedUserData.text = ucs2Decode(smData, 0);
+                this.#decodedUserData.length = (udl - headerOctetCount) / 2
                 break;
             case 8:
-                encoding = 'ASCII';
-                text = octetDecode(smData, 0);
-                length = (udl - headerOctetCount) / 2
+                this.#decodedUserData.encoding = 'ASCII';
+                this.#decodedUserData.text = octetDecode(smData, 0);
+                this.#decodedUserData.ength = (udl - headerOctetCount) / 2
                 break;
             case 7:
-                encoding = 'GSM-7';
+                this.#decodedUserData.encoding = 'GSM-7';
                 const bitOffset = (7 - (headerOctetCount % 7)) % 7; // 0-6 pad bits
                 const headerSeptetCount = (headerOctetCount * 8 + bitOffset) / 7;      // always integer
-                length  = udl - headerSeptetCount;
-                text = sevenBitDecode(smData, bitOffset, length);
+                this.#decodedUserData.length  = udl - headerSeptetCount;
+                this.#decodedUserData.text = sevenBitDecode(smData, bitOffset, this.#decodedUserData.length);
                 break;
             default:
                 throw new Error(`Unknown number of bits: ${bitsPerChar}`);
         }
 
-        return {
-            referenceNumber,
-            segmentsTotal,
-            sequenceNumber,
-            isReference16Bit,
-            encoding,
-            text,
-            length,
-        };
+        return this.#decodedUserData;
+    }
+
+    readInformationElement() {
+        const iei = this.#cursor.takeByte();
+        const iedl = this.#cursor.takeByte();
+        let bytesRead = 2;
+
+        if ((iei === 0x00 && iedl === 0x03) || (iei === 0x08 && iedl === 0x04)) {
+            const referenceOctets = iei === 0x08 ? 2 : 1;
+            const refBytes = this.#cursor.take(referenceOctets);
+            bytesRead += referenceOctets;
+
+            this.#decodedUserData.referenceNumber = referenceOctets === 2
+                ? (refBytes[0] << 8) | refBytes[1]
+                : refBytes[0];
+
+            this.#decodedUserData.segmentsTotal = this.#cursor.takeByte();
+            this.#decodedUserData.sequenceNumber = this.#cursor.takeByte();
+            bytesRead += 2;
+        } else {
+            this.#cursor.take(iedl);
+            bytesRead += iedl; // skip unknown IE
+        }
+        return bytesRead;
     }
 }
 
@@ -411,7 +417,6 @@ export class PDUDecoder {
             referenceNumber,
             segmentsTotal,
             sequenceNumber,
-            isReference16Bit,
             encoding,
             text,
             length
@@ -427,7 +432,6 @@ export class PDUDecoder {
             referenceNumber,
             segmentsTotal,
             sequenceNumber,
-            isReference16Bit,
             length,
             text,
             encoding
