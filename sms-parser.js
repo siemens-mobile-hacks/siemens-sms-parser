@@ -222,13 +222,12 @@ class PredefinedAnimation {
     }
 }
 
-class LargePicture {
-    position;
-    pictureData;
-
-    constructor(position, pictureData) {
+class Picture {
+    constructor(position, pictureData, sideLength) {
         this.position = position;
         this.pictureData = pictureData;
+        this.sideLength = sideLength;
+
         Object.freeze(this);
     }
 
@@ -247,12 +246,27 @@ class LargePicture {
     }
 
     readAsDataUrl() {
-        const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+        const canvas = Object.assign(document.createElement('canvas'), {
+            width:  this.sideLength,
+            height: this.sideLength
+        });
         this.renderOnCanvas(canvas);
         return canvas.toDataURL('image/png');
     }
-
 }
+
+class LargePicture extends Picture {
+    constructor(position, pictureData) {
+        super(position, pictureData, 32);
+    }
+}
+
+class SmallPicture extends Picture {
+    constructor(position, pictureData) {
+        super(position, pictureData, 16);
+    }
+}
+
 class IMelody {
     position;
     iMelodyString;
@@ -272,7 +286,7 @@ class UserData {
     errors=[];
     /** @type Array.<PredefinedAnimation> */
     predefinedAnimations = [];
-    largePictures = [];
+    pictures = [];
     iMelodies = [];
     constructor() {
         Object.seal(this);           // ban undeclared props, keep mutability
@@ -365,9 +379,16 @@ class UserDataDecoder {
                 this.#decodedUserData.predefinedAnimations.push(animation);
                 break;
             case 0x10: //Large Picture (32*32 = 128 bytes)
-                const largePicturePosition = this.#cursor.takeByte();
-                const largePicture = this.#cursor.take(iedl - 1)
-                this.#decodedUserData.largePictures.push(new LargePicture(largePicturePosition, largePicture))
+            case 0x11: //Small Picture (16*16 = 32 bytes)
+                const picturePosition = this.#cursor.takeByte();
+                const pictureData = this.#cursor.take(iedl - 1)
+                let picture;
+                if (iei === 0x10) {
+                    picture = new LargePicture(picturePosition, pictureData);
+                } else {
+                    picture = new SmallPicture(picturePosition, pictureData);
+                }
+                this.#decodedUserData.pictures.push(picture);
                 bytesRead += iedl;
                 break;
             default:
@@ -783,10 +804,21 @@ export class HTMLRenderer  {
                 position: iMelody.position,
                 text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="/img/play-button-icon.svg" alt="Play iMelody"></a>`,});
         }
-        for (const largePicture of segment.largePictures) {
+        for (const picture of segment.pictures) {
+            let pictureType;
+            if (picture instanceof LargePicture) {
+                pictureType = 'large';
+            } else {
+                pictureType = 'small';
+            }
             insertions.push({
-                position: largePicture.position,
-                text: `<img style="image-rendering: pixelated;" class="large-picture" src="${largePicture.readAsDataUrl()}" alt="Large Picture">`,
+                position: picture.position,
+                text: `<img
+                        style="image-rendering: pixelated;" 
+                        class="picture picture-${pictureType}"
+                        src="${picture.readAsDataUrl()}" 
+                        alt="User Picture"
+                        >`,
             });
         }
         insertions = insertions.sort((a, b) => a.position - b.position);
