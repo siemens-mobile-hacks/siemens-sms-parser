@@ -538,6 +538,8 @@ export class SMSDecoder {
             cursor.take(format.segmentStatusOffset - format.timestampOffset - 7); // waste byte
 
         let parsingResult;
+        const htmlRenderer = new HTMLRenderer();
+
         for (let part = 0; part < segmentsTotal; part++) {
             let pdu;
             if (cursor.remaining() < 176) {
@@ -560,13 +562,15 @@ export class SMSDecoder {
                     ...decodedPdu,
                     format: formatName,
                     segmentsTotal,
-                    segmentsStored
+                    segmentsStored,
+                    html: htmlRenderer.renderSegment(decodedPdu),
                 };
                 if (dateAndTimeZoneOffset !== undefined) parsingResult.dateAndTimeZoneOffset = dateAndTimeZoneOffset;
                 if (smsType !== undefined) parsingResult.smsType = smsType;
                 if (smsStatus !== undefined) parsingResult.smsStatus = smsStatus;
             } else {
                 parsingResult.text += decodedPdu.text;
+                parsingResult.html += htmlRenderer.renderSegment(decodedPdu);
                 parsingResult.length += decodedPdu.length;
             }
         }
