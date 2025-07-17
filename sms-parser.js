@@ -668,11 +668,12 @@ const predefinedAnimations = [
     'Devil'
 ];
 export class HTMLRenderer  {
-    #nl2br = (str) =>
-        (str ?? '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g,'$1<br>$2');
-
     renderSegment(segment) {
         let insertions = [];
+        for (let newlineIndex = segment.text.indexOf('\n'); newlineIndex !== -1; newlineIndex = segment.text.indexOf('\n', newlineIndex + 1)) {
+            insertions.push({ position: newlineIndex + 1, text: '<br>' });
+        }
+
         for (const predefinedAnimation of segment.predefinedAnimations) {
             let text;
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
@@ -697,6 +698,6 @@ export class HTMLRenderer  {
             cumulativeOffset += text.length;
         }
 
-        return this.#nl2br(resultingText);
+        return resultingText;
     }
 }
