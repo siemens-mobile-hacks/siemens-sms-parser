@@ -716,7 +716,7 @@ export class HTMLRenderer  {
             const encoded = encodeURIComponent(iMelody.iMelodyString);
             insertions.push({
                 position: iMelody.position,
-                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody))" href="#"><img style="width:13px;" src="/img/play-button-icon.svg" alt="Play iMelody"></a>`,});
+                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="/img/play-button-icon.svg" alt="Play iMelody"></a>`,});
         }
         insertions = insertions.sort((a, b) => a.position - b.position);
         let cumulativeOffset = 0;
