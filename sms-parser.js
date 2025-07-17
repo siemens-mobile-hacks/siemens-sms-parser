@@ -299,10 +299,9 @@ class UserDataDecoder {
                 bytesRead += 2;
                 break;
             case 0x0C: // iMelody
-                let iMelodyPosition = this.#cursor.takeByte();
-                let iMelody = this.#cursor.take(iedl-1)
-                let iMelodyString =  new TextDecoder('ascii').decode(iMelody);
-                console.log(iMelodyString)
+                const iMelodyPosition = this.#cursor.takeByte();
+                const iMelody = this.#cursor.take(iedl-1)
+                const iMelodyString =  new TextDecoder('ascii').decode(iMelody);
                 this.#decodedUserData.iMelodies.push(new IMelody(iMelodyPosition, iMelodyString))
                 bytesRead += iedl;
                 break;
