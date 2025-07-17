@@ -560,8 +560,17 @@ const FileFormats = Object.freeze({
         segmentStatusOffset: 5,
         smsCOffset: 6
     },
-    X55_ME45: {
+    x45_C55: {
         signature:  Uint8Array.from([0x0b, 0x0b, 0x01, 0x01, 0x00]),
+        smsPartsOffset: 5,
+        smsTypeOffset: 7,
+        smsStatusOffset: 8,
+        timestampOffset: 9,
+        segmentStatusOffset: 16,
+        smsCOffset: 17
+    },
+    ME45_2: {
+        signature:  Uint8Array.from([0x0b, 0x0b, 0x01, 0x0b, 0x00]),
         smsPartsOffset: 5,
         smsTypeOffset: 7,
         smsStatusOffset: 8,
