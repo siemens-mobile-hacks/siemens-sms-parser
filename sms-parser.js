@@ -1,3 +1,4 @@
+import {playIMelody} from "./imelody.js";
 const bytesEqual = (a, b) =>
     a.length === b.length && a.every((v, i) => v === b[i]);
 
@@ -203,6 +204,15 @@ class PredefinedAnimation {
         Object.freeze(this);
     }
 }
+class IMelody {
+    position;
+    iMelodyString;
+    constructor(position, iMelodyString) {
+        this.position = position;
+        this.iMelodyString = iMelodyString;
+        Object.freeze(this);
+    }
+}
 class UserData {
     referenceNumber = undefined;   // integer (0-255 or 0-65535)
     segmentsTotal = undefined;   // integer 1-255
@@ -213,6 +223,7 @@ class UserData {
     errors=[];
     /** @type Array.<PredefinedAnimation> */
     predefinedAnimations = [];
+    iMelodies = [];
     constructor() {
         Object.seal(this);           // ban undeclared props, keep mutability
     }
@@ -286,6 +297,14 @@ class UserDataDecoder {
                 this.#decodedUserData.segmentsTotal = this.#cursor.takeByte();
                 this.#decodedUserData.sequenceNumber = this.#cursor.takeByte();
                 bytesRead += 2;
+                break;
+            case 0x0C: // iMelody
+                let iMelodyPosition = this.#cursor.takeByte();
+                let iMelody = this.#cursor.take(iedl-1)
+                let iMelodyString =  new TextDecoder('ascii').decode(iMelody);
+                console.log(iMelodyString)
+                this.#decodedUserData.iMelodies.push(new IMelody(iMelodyPosition, iMelodyString))
+                bytesRead += iedl;
                 break;
             case 0x0D: //predefined animation
                 if (iedl !== 0x02) {
@@ -685,6 +704,15 @@ export class HTMLRenderer  {
                 position: predefinedAnimation.position,
                 text,
             });
+        }
+        if (segment.iMelodies.length > 0) {
+            if (typeof window !== 'undefined' && window.playIMelody === undefined) window.playIMelody = playIMelody;
+        }
+        for (const iMelody of segment.iMelodies) {
+            const encoded = encodeURIComponent(iMelody.iMelodyString);
+            insertions.push({
+                position: iMelody.position,
+                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody))" href="#">Play iMelody</a>`,});
         }
         insertions = insertions.sort((a, b) => a.position - b.position);
         let cumulativeOffset = 0;
