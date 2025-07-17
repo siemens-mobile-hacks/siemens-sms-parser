@@ -233,7 +233,7 @@ class Picture {
 
     renderOnCanvas(canvas) {
         const context = canvas.getContext('2d');
-        const imageData = context.createImageData(32, 32);
+        const imageData = context.createImageData(this.sideLength, this.sideLength);
         let i = 0;
         for (const pixelBit of iterateBits(this.pictureData)) {
             imageData.data[i] = pixelBit ? 0 : 255; // R value
