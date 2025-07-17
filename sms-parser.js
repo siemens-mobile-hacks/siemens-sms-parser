@@ -457,10 +457,6 @@ export class PDUDecoder {
             ? { ...common, type: 'Outgoing', recipient: phone, messageRef, validityPeriod }
             : { ...common, type: 'Incoming', sender: phone, dateAndTimeZoneOffset };
     }
-
-    #decodeUserData(body, udhiPresent, bitsPerChar) {
-
-    }
 }
 
 const FileFormats = Object.freeze({
@@ -591,7 +587,6 @@ function mergeSegments(segments) {
             console.warn(`Duplicate segment ${segment.sequenceNumber} of ${segment.referenceNumber} from ${peer}`);
         }
     }
-    const htmlRenderer = new HTMLRenderer();
 
     // Assemble buckets whose part list is complete
     for (const {first, total, parts} of multipartBuckets.values()) {
@@ -612,7 +607,7 @@ function mergeSegments(segments) {
                 merged.segmentsStored++;
                 merged.length += part.length;
                 merged.text += part.text;
-                merged.html += htmlRenderer.renderSegment(part);
+                merged.html += part.html;
                 merged.errors = [...merged.errors, ...part.errors];
             }
         }
@@ -631,6 +626,7 @@ export class SMSDatParser {
         const NSG_EMPTY =  Uint8Array.from([0xff, 0xff]);
         const EXPECTED_HEADER =  Uint8Array.from([0x11, 0x11]);
 
+        const htmlRenderer = new HTMLRenderer();
         const segments = [];
         let messageIndex = 0;
         while (cursor.remaining() >= 2) {
@@ -645,6 +641,7 @@ export class SMSDatParser {
             const decoded = new PDUDecoder().decodeSmsDat(pdu);
             if (decoded !== undefined) {
                 decoded.messageIndex = messageIndex;
+                decoded.html = htmlRenderer.renderSegment(decoded);
                 segments.push(decoded);
             }
             messageIndex++;
