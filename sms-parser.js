@@ -13,6 +13,23 @@ const byteToBooleansLSBFirst = byte => {
     for (let i = 0; i < 8; i++) bits[i] = Boolean((byte >> i) & 1);
     return bits;
 };
+function convertBlobToBase64String(imageBlob) {
+    return new Promise((resolve, reject) => {
+        const fileReader = new FileReader();
+        fileReader.onloadend = () => resolve(fileReader.result.split(',')[1]);
+        fileReader.onerror = () => reject(fileReader.error);
+        fileReader.readAsDataURL(imageBlob);
+    });
+}
+
+function* iterateBits(uint8Array) {
+    for (let byteIndex = 0; byteIndex < uint8Array.length; byteIndex++) {
+        const currentByteValue = uint8Array[byteIndex];
+        for (let bitPosition = 7; bitPosition >= 0; bitPosition--) {
+            yield (currentByteValue >> bitPosition) & 1;
+        }
+    }
+}
 export const formatTimestampToIsoWithOffset = function (dateOrTimestamp, customOffsetMinutes) {
     const inputDate = dateOrTimestamp instanceof Date
         ? new Date(dateOrTimestamp.getTime())
@@ -204,6 +221,38 @@ class PredefinedAnimation {
         Object.freeze(this);
     }
 }
+
+class LargePicture {
+    position;
+    pictureData;
+
+    constructor(position, pictureData) {
+        this.position = position;
+        this.pictureData = pictureData;
+        Object.freeze(this);
+    }
+
+    renderOnCanvas(canvas) {
+        const context = canvas.getContext('2d');
+        const imageData = context.createImageData(32, 32);
+        let i = 0;
+        for (const pixelBit of iterateBits(this.pictureData)) {
+            imageData.data[i] = pixelBit ? 0 : 255; // R value
+            imageData.data[i + 1] = pixelBit ? 0 : 255; // G value
+            imageData.data[i + 2] = pixelBit ? 0 : 255; // B value
+            imageData.data[i + 3] = 255; // A value
+            i += 4;
+        }
+        context.putImageData(imageData, 0, 0);
+    }
+
+    readAsDataUrl() {
+        const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+        this.renderOnCanvas(canvas);
+        return canvas.toDataURL('image/png');
+    }
+
+}
 class IMelody {
     position;
     iMelodyString;
@@ -223,6 +272,7 @@ class UserData {
     errors=[];
     /** @type Array.<PredefinedAnimation> */
     predefinedAnimations = [];
+    largePictures = [];
     iMelodies = [];
     constructor() {
         Object.seal(this);           // ban undeclared props, keep mutability
@@ -314,7 +364,13 @@ class UserDataDecoder {
                 bytesRead += 2;
                 this.#decodedUserData.predefinedAnimations.push(animation);
                 break;
-        default:
+            case 0x10: //Large Picture (32*32 = 128 bytes)
+                const largePicturePosition = this.#cursor.takeByte();
+                const largePicture = this.#cursor.take(iedl - 1)
+                this.#decodedUserData.largePictures.push(new LargePicture(largePicturePosition, largePicture))
+                bytesRead += iedl;
+                break;
+            default:
             this.#decodedUserData.errors.push(`Message contains an unsupported Information Element: ${iei.toString(16).padStart(2, '0')}`);
             this.#cursor.take(iedl);
             bytesRead += iedl; // skip unknown IE
@@ -701,7 +757,7 @@ export class HTMLRenderer  {
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
                 text = '<Incorrect predefined animation>';
             } else  {
-                text = `<img class="predefined-animation" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
+                text = `<img class="predefined-animation" style="image-rendering: pixelated;" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
             }
             insertions.push({
                 position: predefinedAnimation.position,
@@ -717,18 +773,24 @@ export class HTMLRenderer  {
                 position: iMelody.position,
                 text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="/img/play-button-icon.svg" alt="Play iMelody"></a>`,});
         }
+        for (const largePicture of segment.largePictures) {
+            insertions.push({
+                position: largePicture.position,
+                text: `<img style="image-rendering: pixelated;" class="large-picture" src="${largePicture.readAsDataUrl()}" alt="Large Picture">`,
+            })
+        }
         insertions = insertions.sort((a, b) => a.position - b.position);
         let cumulativeOffset = 0;
-        let resultingText = segment.text;
-        for (const { position, text } of insertions) {
+        let resultingHtml = segment.text; //todo: escape html
+        for (const {position, text} of insertions) {
             const targetIndex = position + cumulativeOffset;
-            resultingText =
-                resultingText.slice(0, targetIndex) +
+            resultingHtml =
+                resultingHtml.slice(0, targetIndex) +
                 text +
-                resultingText.slice(targetIndex);
+                resultingHtml.slice(targetIndex);
             cumulativeOffset += text.length;
         }
 
-        return resultingText;
+        return resultingHtml;
     }
 }
