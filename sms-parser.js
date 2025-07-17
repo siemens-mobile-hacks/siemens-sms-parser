@@ -746,6 +746,16 @@ const predefinedAnimations = [
     'Devil'
 ];
 export class HTMLRenderer  {
+    #escapeHtml(raw) {
+        return raw.replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[ch]));
+    }
+
     renderSegment(segment) {
         let insertions = [];
         for (let newlineIndex = segment.text.indexOf('\n'); newlineIndex !== -1; newlineIndex = segment.text.indexOf('\n', newlineIndex + 1)) {
@@ -777,20 +787,20 @@ export class HTMLRenderer  {
             insertions.push({
                 position: largePicture.position,
                 text: `<img style="image-rendering: pixelated;" class="large-picture" src="${largePicture.readAsDataUrl()}" alt="Large Picture">`,
-            })
+            });
         }
         insertions = insertions.sort((a, b) => a.position - b.position);
-        let cumulativeOffset = 0;
-        let resultingHtml = segment.text; //todo: escape html
-        for (const {position, text} of insertions) {
-            const targetIndex = position + cumulativeOffset;
-            resultingHtml =
-                resultingHtml.slice(0, targetIndex) +
-                text +
-                resultingHtml.slice(targetIndex);
-            cumulativeOffset += text.length;
-        }
 
-        return resultingHtml;
+        // Build output while preserving positions
+        let lastIndex = 0;
+        const htmlParts = [];
+        for (const { position, text } of insertions) {
+            htmlParts.push(this.#escapeHtml(segment.text.slice(lastIndex, position)));
+            htmlParts.push(text);
+            lastIndex = position;
+        }
+        htmlParts.push(this.#escapeHtml(segment.text.slice(lastIndex)));
+
+        return htmlParts.join('');
     }
 }
