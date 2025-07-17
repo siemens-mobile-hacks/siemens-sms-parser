@@ -246,6 +246,9 @@ class Picture {
     }
 
     readAsDataUrl() {
+        if (typeof document === 'undefined') {
+            return '';
+        }
         const canvas = Object.assign(document.createElement('canvas'), {
             width:  this.sideLength,
             height: this.sideLength
