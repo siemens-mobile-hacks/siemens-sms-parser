@@ -1,4 +1,5 @@
 import {playIMelody} from "./imelody.js";
+
 const bytesEqual = (a, b) =>
     a.length === b.length && a.every((v, i) => v === b[i]);
 
@@ -20,6 +21,23 @@ function convertBlobToBase64String(imageBlob) {
         fileReader.onerror = () => reject(fileReader.error);
         fileReader.readAsDataURL(imageBlob);
     });
+}
+
+function convertUint8ArrayToBase64(uint8ArrayInput) {
+    let binaryString = '';
+    for (let byteIndex = 0; byteIndex < uint8ArrayInput.length; byteIndex++) {
+        binaryString += String.fromCharCode(uint8ArrayInput[byteIndex]);
+    }
+    return btoa(binaryString);
+}
+
+function convertBase64ToUint8Array(base64Input) {
+    const binaryString = atob(base64Input);
+    const outputArray = new Uint8Array(binaryString.length);
+    for (let charIndex = 0; charIndex < binaryString.length; charIndex++) {
+        outputArray[charIndex] = binaryString.charCodeAt(charIndex);
+    }
+    return outputArray;
 }
 
 function* iterateBits(uint8Array) {
@@ -222,6 +240,19 @@ class PredefinedAnimation {
     }
 }
 
+function putPictureDataOnContext(context, pictureData, sideLength) {
+    const imageData = context.createImageData(sideLength, sideLength);
+    let i = 0;
+    for (const pixelBit of iterateBits(pictureData)) {
+        imageData.data[i] = pixelBit ? 0 : 255; // R value
+        imageData.data[i + 1] = pixelBit ? 0 : 255; // G value
+        imageData.data[i + 2] = pixelBit ? 0 : 255; // B value
+        imageData.data[i + 3] = 255; // A value
+        i += 4;
+    }
+    context.putImageData(imageData, 0, 0);
+}
+
 class Picture {
     constructor(position, pictureData, sideLength) {
         this.position = position;
@@ -233,16 +264,7 @@ class Picture {
 
     renderOnCanvas(canvas) {
         const context = canvas.getContext('2d');
-        const imageData = context.createImageData(this.sideLength, this.sideLength);
-        let i = 0;
-        for (const pixelBit of iterateBits(this.pictureData)) {
-            imageData.data[i] = pixelBit ? 0 : 255; // R value
-            imageData.data[i + 1] = pixelBit ? 0 : 255; // G value
-            imageData.data[i + 2] = pixelBit ? 0 : 255; // B value
-            imageData.data[i + 3] = 255; // A value
-            i += 4;
-        }
-        context.putImageData(imageData, 0, 0);
+        putPictureDataOnContext(context, this.pictureData, this.sideLength);
     }
 
     readAsDataUrl() {
@@ -258,6 +280,51 @@ class Picture {
     }
 }
 
+function renderAnimationOnCanvas(canvas, animationData, sideLength) {
+    let frames = []
+    const numberOfFrames = 4;
+    const totalBytes = animationData.length;
+    for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+        const startByte = frameIndex * totalBytes / numberOfFrames;
+        const endByte = (frameIndex + 1) * totalBytes / numberOfFrames;
+        const frameData = animationData.subarray(startByte, endByte);
+        const canvas = document.createElement('canvas');
+        putPictureDataOnContext(canvas.getContext('2d'), frameData, sideLength)
+        frames.push(canvas);
+    }
+
+    const framesPerSecond = 3;
+    const millisecondsPerFrame = 1000 / framesPerSecond;
+
+    let currentFrameIndex = 0;
+    let previousTimestamp = 0;
+    const visibleContext = canvas.getContext('2d');
+
+    function renderNextFrame(highResolutionTimestamp) {
+        if (highResolutionTimestamp - previousTimestamp >= millisecondsPerFrame) {
+            visibleContext.clearRect(0, 0, canvas.width, canvas.height);
+            visibleContext.drawImage(frames[currentFrameIndex], 0, 0);
+
+            currentFrameIndex = (currentFrameIndex + 1) % numberOfFrames;
+            previousTimestamp = highResolutionTimestamp;
+        }
+        requestAnimationFrame(renderNextFrame);
+    }
+
+    requestAnimationFrame(renderNextFrame);
+}
+
+class Animation {
+    constructor(position, animationData, sideLength) {
+        this.position = position;
+        this.animationData = animationData;
+        this.sideLength = sideLength;
+
+        Object.freeze(this);
+    }
+
+
+}
 class LargePicture extends Picture {
     constructor(position, pictureData) {
         super(position, pictureData, 32);
@@ -290,7 +357,10 @@ class UserData {
     /** @type Array.<PredefinedAnimation> */
     predefinedAnimations = [];
     pictures = [];
+    /** @type Array.<IMelody> */
     iMelodies = [];
+    /** @type Array.<Animation> */
+    animations = [];
     constructor() {
         Object.seal(this);           // ban undeclared props, keep mutability
     }
@@ -377,9 +447,15 @@ class UserDataDecoder {
                     this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
                     return iedl;
                 }
-                let animation = new PredefinedAnimation(this.#cursor.takeByte(), this.#cursor.takeByte());
+                let predefinedAnimation = new PredefinedAnimation(this.#cursor.takeByte(), this.#cursor.takeByte());
                 bytesRead += 2;
-                this.#decodedUserData.predefinedAnimations.push(animation);
+                this.#decodedUserData.predefinedAnimations.push(predefinedAnimation);
+                break;
+            case 0x0E: //Large Animation (16*16 times 4 = 32*4 =128 bytes)
+            case 0x0F: //Small Animation (8*8 times 4 = 8*4 =32 bytes)
+                let animation = new Animation(this.#cursor.takeByte(), this.#cursor.take(iedl - 1), iei === 0x0E ? 16 : 8);
+                this.#decodedUserData.animations.push(animation);
+                bytesRead += iedl;
                 break;
             case 0x10: //Large Picture (32*32 = 128 bytes)
             case 0x11: //Small Picture (16*16 = 32 bytes)
@@ -833,6 +909,18 @@ export class HTMLRenderer  {
                         >`,
             });
         }
+        for (const animation of segment.animations) {
+            insertions.push({
+                position: animation.position,
+                text: `<canvas
+                        width="${animation.sideLength}"
+                        height="${animation.sideLength}"
+                        class="animation"
+                        style="image-rendering: pixelated;"
+                        data-animation="${convertUint8ArrayToBase64(animation.animationData)}"
+                        ></canvas>`,
+            });
+        }
         insertions = insertions.sort((a, b) => a.position - b.position);
 
         // Build output while preserving positions
@@ -846,5 +934,11 @@ export class HTMLRenderer  {
         htmlParts.push(this.#escapeHtml(segment.text.slice(lastIndex)));
 
         return htmlParts.join('');
+    }
+
+    initHandlers() {
+        document.querySelectorAll('canvas.animation').forEach(el => {
+            renderAnimationOnCanvas(el, convertBase64ToUint8Array(el.dataset.animation), el.width);
+        })
     }
 }
