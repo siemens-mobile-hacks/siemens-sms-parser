@@ -230,6 +230,161 @@ class ByteCursor {
         return this.b.length - this.i;
     }
 }
+
+const TextAlignment = Object.freeze({
+    Left: 0b00,
+    Center: 0b01,
+    Right: 0b10,
+    LanguageDependent: 0b11
+});
+
+const FontSize = Object.freeze({
+    Normal: 0b00,
+    Large: 0b01,
+    Small: 0b10,
+    Reserved: 0b11
+});
+
+class TextFormatting {
+    /**
+     * Start position of the text formatting. Set to the number of characters after the formatting shall be applied from the beginning of the SM data.
+     * This octet shall be coded as an integer value in the range 0 (beginning of the SM data) to the maximum number of characters included in the SM data of one single SM or one segment of a concatenated SM.
+     */
+    position;
+    /**
+     * Text formatting length. Gives the number of formatted characters or sets a default text formatting.
+     * This octet shall be coded as an integer value in the range 1 to the maximum number of characters for which the formatting applies in one single SM or one segment of a concatenated SM.
+     * A text formatting length value of 0 indicates that the text format shall be used as a default text format for the current SM. The default text format shall be used for all text in a concatenated SM unless temporarily overridden by a text formatting IE with a non-zero text format length field.
+     * It shall be possible to re-define the default text formatting to be applied to all subsequent text in the current SM by sending a new Text Format IE with text format length zero.
+     * Conflicting overlapping text formatting instructions shall be resolved by applying the formatting instructions in their sequential order.
+     */
+    length;
+    /**
+     * Formatting mode value coded as following:
+     * Bit 7	Bit 6	Bit 5	Bit 4	Bit 3	Bit 2	Bit 1	Bit 0
+     *
+     * Bit 1	Bit 0	*Alignment
+     * 0	0	Left
+     * 0	1	Center
+     * 1	0	Right
+     * 1	1	Language dependent (default)
+     * *in case formatting text is inserted on the same line as previous non formatting text or with a different mode value,
+     * the alignment value shall be set to the same value as the previous formatted predefined object.
+     * Alignment may affect object placement.
+     * Bit 3	Bit 2	Font Size
+     * 0	0	Normal (default)
+     * 0	1	Large
+     * 1	0	Small
+     * 1	1	reserved
+     * Bit 4		Style bold
+     * 1		Bold on
+     * 0		Bold off
+     * Bit 5		Style Italic
+     * 1		Italic on
+     * 0		Italic off
+     *
+     * Bit 6		Style Underlined
+     * 1		Underlined on
+     * 0		Underlined off
+     * Bit 7		Style Strikethrough
+     * 1		Strikethrough on
+     * 0		Strikethrough off
+     * If bit 4,5,6 and 7 are set to 0, it will mean normal style (default).
+     */
+    formattingMode;
+    /**
+     * This Octet may be omitted by setting the IED length accordingly.
+     *    Bits 0..3 define the Text Foreground Colour
+     * Bits 4..7 define the Text Background Colour
+     * Each colour is defined in a semi octet according to the table below. The actual colours displayed may vary between ME's depending on the display device used.
+     * The colour values defined are simple primary and secondary colours plus four levels of grey. Bright colours have a higher intensity than dark colours.
+     * Nibble Value		Colour
+     * (msb…lsb)
+     * 0000			Black
+     * 0001			Dark Grey
+     * 0010			Dark Red
+     * 0011			Dark Yellow
+     * 0100			Dark Green
+     * 0101			Dark Cyan
+     * 0110			Dark Blue
+     * 0111			Dark Magenta
+     * 1000			Grey
+     * 1001			White
+     * 1010			Bright Red
+     * 1011			Bright Yellow
+     * 1100			Bright Green
+     * 1101			Bright Cyan
+     * 1110			Bright Blue
+     * 1111			Bright Magenta
+     */
+    foregroundColor;
+    backgroundColor;
+
+    constructor(position, length, formattingMode, foregroundColor = undefined, backgroundColor = undefined) {
+        this.position = position;
+        this.length = length;
+        this.formattingMode = formattingMode;
+        this.foregroundColor = foregroundColor;
+        this.backgroundColor = backgroundColor;
+    }
+
+    #nibbleToColor = {
+        '0x00': {name: 'black', htmlHex: '#000000'},
+        '0x01': {name: 'dark-grey', htmlHex: '#555555'},
+        '0x02': {name: 'dark-red', htmlHex: '#800000'},
+        '0x03': {name: 'dark-yellow', htmlHex: '#808000'},
+        '0x04': {name: 'dark-green', htmlHex: '#008000'},
+        '0x05': {name: 'dark-cyan', htmlHex: '#008080'},
+        '0x06': {name: 'dark-blue', htmlHex: '#000080'},
+        '0x07': {name: 'dark-magenta', htmlHex: '#800080'},
+        '0x08': {name: 'grey', htmlHex: '#AAAAAA'},
+        '0x09': {name: 'white', htmlHex: '#FFFFFF'},
+        '0x0A': {name: 'bright-red', htmlHex: '#FF0000'},
+        '0x0B': {name: 'bright-yellow', htmlHex: '#FFFF00'},
+        '0x0C': {name: 'bright-green', htmlHex: '#00FF00'},
+        '0x0D': {name: 'bright-cyan', htmlHex: '#00FFFF'},
+        '0x0E': {name: 'bright-blue', htmlHex: '#0000FF'},
+        '0x0F': {name: 'bright-Magenta', htmlHex: '#FF00FF'}
+    };
+
+    getTextAlignment() {
+        return this.formattingMode & 0b0000_0011;
+    }
+
+    getFontSize() {
+        return (this.formattingMode & 0b0000_1100) >> 2;
+    }
+
+    isBold() {
+        return (this.formattingMode & (1 << 4)) !== 0;
+    }
+
+    isItalic() {
+        return (this.formattingMode & (1 << 5)) !== 0;
+    }
+
+    isUnderlined() {
+        return (this.formattingMode & (1 << 6)) !== 0;
+    }
+
+    isStrikethrough() {
+        return (this.formattingMode & (1 << 7)) !== 0;
+    }
+
+    getForegroundColor() {
+        if (this.foregroundColor === undefined) {
+            return undefined;
+        }
+        return this.#nibbleToColor[this.foregroundColor];
+    }
+
+    getBackgroundColor() {
+        if (this.backgroundColor === undefined) {
+            return undefined;
+        }
+        return this.#nibbleToColor[this.backgroundColor];
+    }
+}
 class PredefinedAnimation {
     position;
     animationNumber;
@@ -354,6 +509,8 @@ class UserData {
     text = undefined;   // string
     length = undefined;   // non-negative integer
     errors=[];
+    /** @type Array.<TextFormatting> */
+    textFormattings = [];
     /** @type Array.<PredefinedAnimation> */
     predefinedAnimations = [];
     pictures = [];
@@ -422,6 +579,8 @@ class UserDataDecoder {
                 const referenceOctets = iei === 0x08 ? 2 : 1;
                 if ((iei === 0x00 && iedl !== 0x03) || (iei === 0x08 && iedl !== 0x04)) {
                     this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
+                    this.#cursor.take(iedl);
+                    bytesRead += iedl;
                     return iedl;
                 }
                 const refBytes = this.#cursor.take(referenceOctets);
@@ -435,6 +594,24 @@ class UserDataDecoder {
                 this.#decodedUserData.sequenceNumber = this.#cursor.takeByte();
                 bytesRead += 2;
                 break;
+            case 0x0A: //Text Formatting
+                if (iedl !== 0x03 && iedl !== 0x04) {
+                    this.#decodedUserData.errors.push(`Unexpected text formatting IEI length: ${iei}/${iedl}`);
+                    this.#cursor.take(iedl);
+                    return iedl;
+                }
+                const startPosition = this.#cursor.takeByte();
+                const length = this.#cursor.takeByte();
+                const formattingMode = this.#cursor.takeByte();
+                let foregroundColor, backgroundColor;
+                if (iedl === 0x04) {
+                    const color = this.#cursor.takeByte();
+                    foregroundColor = color & 0x0F;
+                    backgroundColor = (color >> 4) & 0x0F;
+                }
+                bytesRead += iedl;
+                this.#decodedUserData.textFormattings.push(new TextFormatting(startPosition, length, formattingMode, foregroundColor, backgroundColor));
+                break;
             case 0x0C: // iMelody
                 const iMelodyPosition = this.#cursor.takeByte();
                 const iMelody = this.#cursor.take(iedl-1)
@@ -445,6 +622,7 @@ class UserDataDecoder {
             case 0x0D: //predefined animation
                 if (iedl !== 0x02) {
                     this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
+                    this.#cursor.take(iedl);
                     return iedl;
                 }
                 let predefinedAnimation = new PredefinedAnimation(this.#cursor.takeByte(), this.#cursor.takeByte());
@@ -870,7 +1048,7 @@ export class HTMLRenderer  {
         for (let newlineIndex = segment.text.indexOf('\n'); newlineIndex !== -1; newlineIndex = segment.text.indexOf('\n', newlineIndex + 1)) {
             insertions.push({ position: newlineIndex + 1, text: '<br>' });
         }
-
+        insertions.push(...this.#getTextFormattingInsertions(segment));
         for (const predefinedAnimation of segment.predefinedAnimations) {
             let text;
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
@@ -934,6 +1112,135 @@ export class HTMLRenderer  {
         htmlParts.push(this.#escapeHtml(segment.text.slice(lastIndex)));
 
         return htmlParts.join('');
+    }
+    calculateTextFormattingClassAndStyle(textFormatting) {
+        const classes = [];
+        const styles = [];
+        if (textFormatting.length === 0) return { classes, styles };
+        const alignment = textFormatting.getTextAlignment()
+        if (alignment !== TextAlignment.LanguageDependent) {
+            let alignmentCssValue;
+            switch (alignment) {
+                case TextAlignment.Left:
+                    alignmentCssValue = 'left';
+                    break;
+                case TextAlignment.Right:
+                    alignmentCssValue = 'right';
+                    break;
+                case TextAlignment.Center:
+                    alignmentCssValue = 'center';
+                    break;
+            }
+            classes.push(`text-alignment-${alignmentCssValue}`);
+            styles.push(`text-align:${alignmentCssValue}`);
+            styles.push('display:block');
+        }
+
+        const fontSize = textFormatting.getFontSize();
+        if (fontSize !== FontSize.Normal) {
+            let fontSizeCssValue;
+            let fontSizeClass;
+            switch (fontSize) {
+                case FontSize.Small:
+                    fontSizeCssValue = '8px';
+                    fontSizeClass = 'small';
+                    break;
+                case FontSize.Large:
+                    fontSizeCssValue = '16px';
+                    fontSizeClass = 'large';
+                    break;
+                default:
+                    fontSizeClass = 'unknown';
+                    console.warn(`Unknown font size: ${textFormatting.getFontSize()}`);
+            }
+            classes.push(`font-size-${fontSizeClass}`);
+            if (fontSizeCssValue !== undefined) {
+                styles.push(`font-size:${fontSizeCssValue}`);
+            }
+        }
+        if (textFormatting.isBold())  {
+            classes.push('text-bold');
+            styles.push('font-weight: bold');
+        }
+        if (textFormatting.isItalic())  {
+            classes.push('text-italic');
+            styles.push('font-style: italic');
+        }
+        if (textFormatting.isUnderlined())  {
+            classes.push('text-underline');
+            if (textFormatting.isStrikethrough()) {
+                classes.push('text-strikethrough');
+                styles.push('text-decoration: line-through underline');
+            } else {
+                styles.push('text-decoration: underline');
+            }
+        } else if (textFormatting.isStrikethrough())  {
+            classes.push('text-strikethrough');
+            styles.push('text-decoration: line-through');
+        }
+
+        const foregroundColor = textFormatting.getForegroundColor();
+        if (foregroundColor !== undefined) {
+            classes.push(`text-color-${foregroundColor.name}`);
+            styles.push(`color: ${foregroundColor.htmlHex}`);
+        }
+        const backgroundColor = textFormatting.getBackgroundColor();
+        if (backgroundColor !== undefined) {
+            classes.push(`background-color-${backgroundColor.name}`);
+            styles.push(`background-color: ${backgroundColor.htmlHex}`);
+        }
+        return { classes, styles };
+    }
+    #getTextFormattingInsertions(segment) {
+        if (segment.textFormattings.length === 0) return [];
+        let textByCharacter = segment.text.split('');
+        let styleByCharacter = [];
+        let classByCharacter = [];
+        for (const character of textByCharacter) {
+            styleByCharacter.push("");
+            classByCharacter.push("");
+        }
+        for (const textFormatting of segment.textFormattings) {
+            const {classes, styles} = this.calculateTextFormattingClassAndStyle(textFormatting);
+            if (classes.length === 0) continue;
+            const finalCharacterIndex = textFormatting.position + textFormatting.length;
+            for (let characterIndex = textFormatting.position; characterIndex < finalCharacterIndex; characterIndex++) {
+                // per the spec, execute the formatting directives in the order they are encountered
+                // and override the previous directive if there is an overalp
+                classByCharacter[characterIndex] = classes.join(' ');
+                styleByCharacter[characterIndex] = styles.join('; ')
+            }
+        }
+        const insertions = [];
+        let lastClass = '';
+        let spanOpen = false;
+        for (let characterIndex=0; characterIndex < styleByCharacter.length; characterIndex++) {
+            if (lastClass !== classByCharacter[characterIndex]) {
+                lastClass = classByCharacter[characterIndex];
+                if (spanOpen) {
+                    insertions.push({
+                        position: characterIndex,
+                        text: `</span>`
+                    });
+                }
+                if (classByCharacter[characterIndex] === '') {
+                    spanOpen = false;
+                } else {
+                    insertions.push({
+                        position: characterIndex,
+                        text: `<span class="${classByCharacter[characterIndex]}" style="${styleByCharacter[characterIndex]}">`
+                    });
+                    spanOpen = true;
+                }
+            }
+        }
+        if (spanOpen) {
+            insertions.push({
+                position: styleByCharacter.length,
+                text: `</span>`
+            });
+        }
+        return insertions;
     }
 
     initHandlers() {
