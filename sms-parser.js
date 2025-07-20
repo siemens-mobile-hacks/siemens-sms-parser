@@ -1133,7 +1133,6 @@ export class HTMLRenderer  {
             }
             classes.push(`text-alignment-${alignmentCssValue}`);
             styles.push(`text-align:${alignmentCssValue}`);
-            styles.push('display:block');
         }
 
         const fontSize = textFormatting.getFontSize();
@@ -1216,7 +1215,6 @@ export class HTMLRenderer  {
         let spanOpen = false;
         for (let characterIndex=0; characterIndex < styleByCharacter.length; characterIndex++) {
             if (lastClass !== classByCharacter[characterIndex]) {
-                lastClass = classByCharacter[characterIndex];
                 if (spanOpen) {
                     insertions.push({
                         position: characterIndex,
@@ -1226,11 +1224,37 @@ export class HTMLRenderer  {
                 if (classByCharacter[characterIndex] === '') {
                     spanOpen = false;
                 } else {
+                    let needBlock = false;
+                    let style = styleByCharacter[characterIndex];
+                    let classes = classByCharacter[characterIndex].split(' ');
+                    let lastClasses = lastClass.split(' ');
+                    for (const className of classes) {
+                        if (!className.startsWith('text-alignment-')) {
+                            continue;
+                        }
+
+                        if (!lastClasses.includes(className)) {
+                            if (className === 'text-alignment-left' &&
+                                !lastClasses.includes('text-alignment-right') &&
+                                !lastClasses.includes('text-alignment-center')
+                            ) {
+                                needBlock = false; //left is the default, no need to start a new line
+                            } else {
+                                needBlock = true;
+                            }
+                            break;
+                        }
+                    }
+                    if (needBlock) {
+                        style += '; display: block';
+                    }
+
                     insertions.push({
                         position: characterIndex,
-                        text: `<span class="${classByCharacter[characterIndex]}" style="${styleByCharacter[characterIndex]}">`
+                        text: `<span class="${classByCharacter[characterIndex]}" style="${style}">`
                     });
                     spanOpen = true;
+                    lastClass = classByCharacter[characterIndex];
                 }
             }
         }
