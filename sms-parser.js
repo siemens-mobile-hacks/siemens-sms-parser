@@ -394,7 +394,15 @@ class PredefinedAnimation {
         Object.freeze(this);
     }
 }
-
+class PredefinedSound {
+    position;
+    soundNumber;
+    constructor(position, soundNumber) {
+        this.position = position;
+        this.soundNumber = soundNumber;
+        Object.freeze(this);
+    }
+}
 function putPictureDataOnContext(context, pictureData, sideLength) {
     const imageData = context.createImageData(sideLength, sideLength);
     let i = 0;
@@ -513,6 +521,8 @@ class UserData {
     textFormattings = [];
     /** @type Array.<PredefinedAnimation> */
     predefinedAnimations = [];
+    /** @type Array.<PredefinedSound> */
+    predefinedSounds = [];
     pictures = [];
     /** @type Array.<IMelody> */
     iMelodies = [];
@@ -581,7 +591,7 @@ class UserDataDecoder {
                     this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
                     this.#cursor.take(iedl);
                     bytesRead += iedl;
-                    return iedl;
+                    break;
                 }
                 const refBytes = this.#cursor.take(referenceOctets);
                 bytesRead += referenceOctets;
@@ -598,7 +608,8 @@ class UserDataDecoder {
                 if (iedl !== 0x03 && iedl !== 0x04) {
                     this.#decodedUserData.errors.push(`Unexpected text formatting IEI length: ${iei}/${iedl}`);
                     this.#cursor.take(iedl);
-                    return iedl;
+                    bytesRead += iedl;
+                    break;
                 }
                 const startPosition = this.#cursor.takeByte();
                 const length = this.#cursor.takeByte();
@@ -612,6 +623,18 @@ class UserDataDecoder {
                 bytesRead += iedl;
                 this.#decodedUserData.textFormattings.push(new TextFormatting(startPosition, length, formattingMode, foregroundColor, backgroundColor));
                 break;
+
+            case 0x0B: //Predefined sound
+                if (iedl !== 0x02) {
+                    this.#decodedUserData.errors.push(`Unexpected predefined sound IEI length: ${iei}/${iedl}`);
+                    this.#cursor.take(iedl);
+                    bytesRead += iedl;
+                    break;
+                }
+                let predefinedSound = new PredefinedSound(this.#cursor.takeByte(), this.#cursor.takeByte());
+                this.#decodedUserData.predefinedSounds.push(predefinedSound);
+                bytesRead += 2;
+                break;
             case 0x0C: // iMelody
                 const iMelodyPosition = this.#cursor.takeByte();
                 const iMelody = this.#cursor.take(iedl-1)
@@ -623,7 +646,8 @@ class UserDataDecoder {
                 if (iedl !== 0x02) {
                     this.#decodedUserData.errors.push(`Unexpected concatenated short message IEI length: ${iei}/${iedl}`);
                     this.#cursor.take(iedl);
-                    return iedl;
+                    bytesRead += iedl;
+                    break;
                 }
                 let predefinedAnimation = new PredefinedAnimation(this.#cursor.takeByte(), this.#cursor.takeByte());
                 bytesRead += 2;
@@ -1049,10 +1073,27 @@ export class HTMLRenderer  {
             insertions.push({ position: newlineIndex + 1, text: '<br>' });
         }
         insertions.push(...this.#getTextFormattingInsertions(segment));
+        for (const predefinedSound of segment.predefinedSounds) {
+            let text;
+            if (predefinedSound.soundNumber > 9)  {
+                text = '&lt;Incorrect predefined sound&gt;';
+            } else  {
+                text = `<a class="predefined-sound" onclick="this.querySelector('audio').play()" href="javascript:void(0)">
+                        <img style="width:13px;" src="/img/play-button-icon.svg" alt="Play Predefined Sound">
+                        <audio preload="auto">
+                            <source src="sounds/${predefinedSound.soundNumber + 1}.webm" type="audio/webm; codecs=opus">
+                        </audio>
+                        </a>`;
+            }
+            insertions.push({
+                position: predefinedSound.position,
+                text,
+            });
+        }
         for (const predefinedAnimation of segment.predefinedAnimations) {
             let text;
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
-                text = '<Incorrect predefined animation>';
+                text = '&lt;Incorrect predefined animation&gt;';
             } else  {
                 text = `<img class="predefined-animation" style="image-rendering: pixelated;" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
             }
