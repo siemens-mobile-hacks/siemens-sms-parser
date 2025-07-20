@@ -1079,7 +1079,7 @@ export class HTMLRenderer  {
                 text = '&lt;Incorrect predefined sound&gt;';
             } else  {
                 text = `<a class="predefined-sound" onclick="this.querySelector('audio').play()" href="javascript:void(0)">
-                        <img style="width:13px;" src="/img/play-button-icon.svg" alt="Play Predefined Sound">
+                        <img style="width:13px;" src="img/play-button-icon.svg" alt="Play Predefined Sound">
                         <audio preload="auto">
                             <source src="sounds/${predefinedSound.soundNumber + 1}.webm" type="audio/webm; codecs=opus">
                         </audio>
@@ -1095,7 +1095,7 @@ export class HTMLRenderer  {
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
                 text = '&lt;Incorrect predefined animation&gt;';
             } else  {
-                text = `<img class="predefined-animation" style="image-rendering: pixelated;" src="/img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
+                text = `<img class="predefined-animation" style="image-rendering: pixelated;" src="img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
             }
             insertions.push({
                 position: predefinedAnimation.position,
@@ -1109,7 +1109,7 @@ export class HTMLRenderer  {
             const encoded = encodeURIComponent(iMelody.iMelodyString);
             insertions.push({
                 position: iMelody.position,
-                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="/img/play-button-icon.svg" alt="Play iMelody"></a>`,});
+                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="img/play-button-icon.svg" alt="Play iMelody"></a>`,});
         }
         for (const picture of segment.pictures) {
             let pictureType;
