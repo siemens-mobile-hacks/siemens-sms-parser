@@ -725,16 +725,16 @@ export class PDUDecoder {
     #decodePduFromFirstOctet() {
         const firstOctet = this.#cursor.takeByte(); // consume FO
         const firstOctetBits = byteToBooleansLSBFirst(firstOctet);
-        const isSubmit = firstOctetBits[0];
-        const isCommandOrStatusReport = firstOctetBits[1];
-        const rejectDuplicatesOrMoreMessagesToSend = firstOctetBits[2];
+        const isSubmit = firstOctetBits[0]; // TP-MTI bit 1
+        const isCommandOrStatusReport = firstOctetBits[1]; // TP-MTI bit 2
+        const rejectDuplicatesOrMoreMessagesToSend = firstOctetBits[2]; //TP-RD
         const loopPrevention = firstOctetBits[3];
 
         const validityPeriodFormat = firstOctetBits[3]; //TP-VPF bit 1
         const validityPeriodFollowsInSubmit = firstOctetBits[4]; //TP-VPF bit 2
-        const statusReportStatus = firstOctetBits[5];
-        const udhiPresent = firstOctetBits[6];
-        const replyPath = firstOctetBits[7];
+        const statusReportStatus = firstOctetBits[5]; //TP-SRR
+        const udhiPresent = firstOctetBits[6]; //TP-UDHI
+        const replyPath = firstOctetBits[7]; //TP-RP
 
         /**
          * The Message Reference field (TP-MR) is used in all messages on the submission side with exception of
@@ -759,8 +759,8 @@ export class PDUDecoder {
         }
 
 
-        const pid = this.#cursor.takeByte();
-        const dcs = this.#cursor.takeByte();
+        const pid = this.#cursor.takeByte(); //TP-PID
+        const dcs = this.#cursor.takeByte(); //TP-DCS
         const bitsPerChar = alphaBits(dcs);
 
         let dateAndTimeZoneOffset;
