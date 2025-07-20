@@ -1146,7 +1146,7 @@ export class HTMLRenderer  {
                     fontSizeClass = 'small';
                     break;
                 case FontSize.Large:
-                    fontSizeCssValue = '16px';
+                    fontSizeCssValue = '24px';
                     fontSizeClass = 'large';
                     break;
                 default:
