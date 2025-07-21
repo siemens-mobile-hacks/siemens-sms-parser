@@ -1056,6 +1056,37 @@ const predefinedAnimations = [
     'Wearing glasses',
     'Devil'
 ];
+
+const predefinedAnimationUrls = [
+    new URL('./img/predefined-animations/1.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/2.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/3.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/4.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/5.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/6.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/7.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/8.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/9.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/10.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/11.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/12.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/13.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/14.webp', import.meta.url).href,
+    new URL('./img/predefined-animations/15.webp', import.meta.url).href,
+];
+const predefinedSoundUrls = [
+    new URL('./predefined-sounds/1.webm', import.meta.url).href,
+    new URL('./predefined-sounds/2.webm', import.meta.url).href,
+    new URL('./predefined-sounds/3.webm', import.meta.url).href,
+    new URL('./predefined-sounds/4.webm', import.meta.url).href,
+    new URL('./predefined-sounds/5.webm', import.meta.url).href,
+    new URL('./predefined-sounds/6.webm', import.meta.url).href,
+    new URL('./predefined-sounds/7.webm', import.meta.url).href,
+    new URL('./predefined-sounds/8.webm', import.meta.url).href,
+    new URL('./predefined-sounds/9.webm', import.meta.url).href,
+    new URL('./predefined-sounds/10.webm', import.meta.url).href,
+];
+const playButtonIcon = new URL('./img/play-button-icon.svg', import.meta.url).href;
 export class HTMLRenderer  {
     #escapeHtml(raw) {
         return raw.replace(/[&<>"']/g, ch => ({
@@ -1077,11 +1108,11 @@ export class HTMLRenderer  {
             let text;
             if (predefinedSound.soundNumber > 9)  {
                 text = '&lt;Incorrect predefined sound&gt;';
-            } else  {
+            } else {
                 text = `<a class="predefined-sound" onclick="this.querySelector('audio').play()" href="javascript:void(0)">
-                        <img style="width:13px;" src="img/play-button-icon.svg" alt="Play Predefined Sound">
+                        <img style="width:13px;" src="${playButtonIcon}" alt="Play Predefined Sound">
                         <audio preload="auto">
-                            <source src="sounds/${predefinedSound.soundNumber + 1}.webm" type="audio/webm; codecs=opus">
+                            <source src="${predefinedSoundUrls[predefinedSound.soundNumber]}" type="audio/webm; codecs=opus">
                         </audio>
                         </a>`;
             }
@@ -1095,7 +1126,8 @@ export class HTMLRenderer  {
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
                 text = '&lt;Incorrect predefined animation&gt;';
             } else  {
-                text = `<img class="predefined-animation" style="image-rendering: pixelated;" src="img/predefined-animations/${predefinedAnimation.animationNumber +1}.webp" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
+                const imageUrl = predefinedAnimationUrls[predefinedAnimation.animationNumber];
+                text = `<img class="predefined-animation" style="image-rendering: pixelated;" src="${imageUrl}" alt="${predefinedAnimations[predefinedAnimation.animationNumber]}">`;
             }
             insertions.push({
                 position: predefinedAnimation.position,
@@ -1109,7 +1141,7 @@ export class HTMLRenderer  {
             const encoded = encodeURIComponent(iMelody.iMelodyString);
             insertions.push({
                 position: iMelody.position,
-                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="img/play-button-icon.svg" alt="Play iMelody"></a>`,});
+                text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="${playButtonIcon}" alt="Play iMelody"></a>`,});
         }
         for (const picture of segment.pictures) {
             let pictureType;
