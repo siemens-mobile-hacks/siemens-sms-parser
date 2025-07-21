@@ -1,6 +1,6 @@
 {
   "name": "siemens-sms-parser",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Extract SMS messages from SMS.dat and .smo/.smi SMS Archive files on Siemens mobile phones.",
   "keywords": [
     "siemens",
@@ -32,7 +32,7 @@
     "sms-parser.d.ts",
     "imelody.js",
     "imelody.d.ts",
-    "sounds",
+    "predefined-sounds",
     "img"
   ],
   "bin": "cli.js",
