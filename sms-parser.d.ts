@@ -210,17 +210,23 @@ export class Picture {
   readonly pictureData: Uint8Array;
 
   /**
-   * Side length of the picture
+   * Width in pixels
    */
-  readonly sideLength: number;
+  readonly width: number;
+
+  /**
+   * Height in pixels
+   */
+  readonly height: number;
 
   /**
    * Creates a new Picture instance
    * @param position - Position in the text
    * @param pictureData - Picture data
-   * @param sideLength - Side length of the picture
+   * @param width - Width in pixels
+   * @param height - Height in pixels
    */
-  constructor(position: number, pictureData: Uint8Array, sideLength: number);
+  constructor(position: number, pictureData: Uint8Array, width: number, height: number);
 
   /**
    * Renders the picture on a canvas
@@ -273,18 +279,25 @@ export class Animation {
    */
   readonly animationData: Uint8Array;
 
+
   /**
-   * Side length of the animation
+   * Width in pixels
    */
-  readonly sideLength: number;
+  readonly width: number;
+
+  /**
+   * Height in pixels
+   */
+  readonly height: number;
 
   /**
    * Creates a new Animation instance
    * @param position - Position in the text
    * @param animationData - Animation data
-   * @param sideLength - Side length of the animation
+   * @param width - Width in pixels
+   * @param height - Height in pixels
    */
-  constructor(position: number, animationData: Uint8Array, sideLength: number);
+  constructor(position: number, animationData: Uint8Array, width: number, height: number);
 }
 
 /**

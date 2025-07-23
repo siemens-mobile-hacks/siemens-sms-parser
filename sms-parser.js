@@ -403,8 +403,8 @@ class PredefinedSound {
         Object.freeze(this);
     }
 }
-function putPictureDataOnContext(context, pictureData, sideLength) {
-    const imageData = context.createImageData(sideLength, sideLength);
+function putPictureDataOnContext(context, pictureData, width, height) {
+    const imageData = context.createImageData(width, height);
     let i = 0;
     for (const pixelBit of iterateBits(pictureData)) {
         imageData.data[i] = pixelBit ? 0 : 255; // R value
@@ -417,17 +417,18 @@ function putPictureDataOnContext(context, pictureData, sideLength) {
 }
 
 class Picture {
-    constructor(position, pictureData, sideLength) {
+    constructor(position, pictureData, width, height) {
         this.position = position;
         this.pictureData = pictureData;
-        this.sideLength = sideLength;
+        this.width = width;
+        this.height = height;
 
         Object.freeze(this);
     }
 
     renderOnCanvas(canvas) {
         const context = canvas.getContext('2d');
-        putPictureDataOnContext(context, this.pictureData, this.sideLength);
+        putPictureDataOnContext(context, this.pictureData, this.width, this.height);
     }
 
     readAsDataUrl() {
@@ -435,15 +436,15 @@ class Picture {
             return '';
         }
         const canvas = Object.assign(document.createElement('canvas'), {
-            width:  this.sideLength,
-            height: this.sideLength
+            width:  this.width,
+            height: this.height,
         });
         this.renderOnCanvas(canvas);
         return canvas.toDataURL('image/png');
     }
 }
 
-function renderAnimationOnCanvas(canvas, animationData, sideLength) {
+function renderAnimationOnCanvas(canvas, animationData, width, height) {
     let frames = []
     const numberOfFrames = 4;
     const totalBytes = animationData.length;
@@ -452,7 +453,7 @@ function renderAnimationOnCanvas(canvas, animationData, sideLength) {
         const endByte = (frameIndex + 1) * totalBytes / numberOfFrames;
         const frameData = animationData.subarray(startByte, endByte);
         const canvas = document.createElement('canvas');
-        putPictureDataOnContext(canvas.getContext('2d'), frameData, sideLength)
+        putPictureDataOnContext(canvas.getContext('2d'), frameData, width, height);
         frames.push(canvas);
     }
 
@@ -478,10 +479,11 @@ function renderAnimationOnCanvas(canvas, animationData, sideLength) {
 }
 
 class Animation {
-    constructor(position, animationData, sideLength) {
+    constructor(position, animationData, width, height) {
         this.position = position;
         this.animationData = animationData;
-        this.sideLength = sideLength;
+        this.width = width;
+        this.height = height;
 
         Object.freeze(this);
     }
@@ -490,13 +492,13 @@ class Animation {
 }
 class LargePicture extends Picture {
     constructor(position, pictureData) {
-        super(position, pictureData, 32);
+        super(position, pictureData, 32, 32);
     }
 }
 
 class SmallPicture extends Picture {
     constructor(position, pictureData) {
-        super(position, pictureData, 16);
+        super(position, pictureData, 16, 16);
     }
 }
 
@@ -655,7 +657,8 @@ class UserDataDecoder {
                 break;
             case 0x0E: //Large Animation (16*16 times 4 = 32*4 =128 bytes)
             case 0x0F: //Small Animation (8*8 times 4 = 8*4 =32 bytes)
-                let animation = new Animation(this.#cursor.takeByte(), this.#cursor.take(iedl - 1), iei === 0x0E ? 16 : 8);
+                const sideLength = iei === 0x0E ? 16 : 8;
+                let animation = new Animation(this.#cursor.takeByte(), this.#cursor.take(iedl - 1), sideLength, sideLength);
                 this.#decodedUserData.animations.push(animation);
                 bytesRead += iedl;
                 break;
@@ -1164,8 +1167,8 @@ export class HTMLRenderer  {
             insertions.push({
                 position: animation.position,
                 text: `<canvas
-                        width="${animation.sideLength}"
-                        height="${animation.sideLength}"
+                        width="${animation.width}"
+                        height="${animation.height}"
                         class="animation"
                         style="image-rendering: pixelated;"
                         data-animation="${convertUint8ArrayToBase64(animation.animationData)}"
@@ -1342,7 +1345,7 @@ export class HTMLRenderer  {
 
     initHandlers() {
         document.querySelectorAll('canvas.animation').forEach(el => {
-            renderAnimationOnCanvas(el, convertBase64ToUint8Array(el.dataset.animation), el.width);
+            renderAnimationOnCanvas(el, convertBase64ToUint8Array(el.dataset.animation), el.width, el.height);
         })
     }
 }
