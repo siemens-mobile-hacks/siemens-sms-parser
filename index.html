@@ -82,7 +82,13 @@
 <div id="resultsContainer"></div>
 
 <script type="module">
-  import { SmsArchiveParser, SMSDatParser, HTMLRenderer, formatTimestampToIsoWithOffset } from './sms-parser.js';
+  import {
+    SmsArchiveParser,
+    SMSDatParser,
+    HTMLRenderer,
+    FileFormats,
+    formatTimestampToIsoWithOffset
+  } from './sms-parser.js';
 
   const fileInput  = document.getElementById("fileInput");
   const dirInput   = document.getElementById("dirInput");
@@ -93,23 +99,35 @@
   fileInput.addEventListener("change", parseSelected);
   dirInput.addEventListener("change", parseSelected);
 
-  async function parseSelected(){
+  function matchesKnownSignature(firstFiveBytes) {
+    return Object.values(FileFormats).some(f =>
+            f.signature.every((byte, idx) => byte === firstFiveBytes[idx])
+    );
+  }
+  const htmlRenderer = new HTMLRenderer();
+  async function parseSelected() {
     const files = [...dirInput.files, ...fileInput.files];
     if (!files.length){ return; }  // nothing picked yet
     document.querySelector('body').classList.add("loading");
     const grouped = {};
-    const htmlRenderer = new HTMLRenderer();
-    for (const file of files){
-      try{
-        const arrayBuffer = await file.arrayBuffer();
-        let messages;
-        if (file.name.endsWith(".dat")) {
-          const decoder = new SMSDatParser();
-          messages = decoder.decode(new Uint8Array(arrayBuffer));
+    for (const file of files) {
+      try {
+        let arrayBuffer;
+
+        if (file.name.endsWith('.dat')) {
+          arrayBuffer = await file.arrayBuffer();
         } else {
-          const decoder = new SmsArchiveParser();
-          messages = [decoder.decode(new Uint8Array(arrayBuffer))];
+          const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+          if (!matchesKnownSignature(head)) {
+            console.warn(`Skipping ${file.name} – signature not recognised`);
+            continue;
+          }
+          arrayBuffer = await file.arrayBuffer(); // safe to read fully now
         }
+
+        const messages = file.name.endsWith('.dat')
+                ? new SMSDatParser().decode(new Uint8Array(arrayBuffer))
+                : [new SmsArchiveParser().decode(new Uint8Array(arrayBuffer))];
 
         for (const msg of messages) {
           const phone = msg.type === "Incoming"
@@ -120,17 +138,15 @@
           grouped[phone] ??= [];
           grouped[phone].push(msg);
         }
-      }catch(e){
+      } catch (e) {
         console.error(`Failed to parse file ${file.name}:`, e);
       }
     }
-
     resultsDiv.innerHTML = renderGrouped(grouped);
     new HTMLRenderer().initHandlers();
     document.querySelector('body').classList.remove("loading");
   }
 
-  /* --- Build the result HTML --- */
   function renderGrouped(grouped){
     const htmlRenderer = new HTMLRenderer();
     const phones = Object.keys(grouped)

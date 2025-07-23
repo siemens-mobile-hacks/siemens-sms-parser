@@ -920,7 +920,7 @@ export class PDUDecoder {
     }
 }
 
-const FileFormats = Object.freeze({
+export const FileFormats = Object.freeze({
     SL4x: {
         signature:  Uint8Array.from([0x0b, 0x0b, 0x00, 0x00, 0x00]),
         segmentStatusOffset: 5,
