@@ -391,7 +391,7 @@ class PredefinedAnimation {
     constructor(position, animationNumber) {
         this.position = position;
         this.animationNumber = animationNumber;
-        Object.freeze(this);
+        Object.seal(this);
     }
 }
 class PredefinedSound {
@@ -400,13 +400,18 @@ class PredefinedSound {
     constructor(position, soundNumber) {
         this.position = position;
         this.soundNumber = soundNumber;
-        Object.freeze(this);
+        Object.seal(this);
     }
 }
 function putPictureDataOnContext(context, pictureData, width, height) {
     const imageData = context.createImageData(width, height);
     let i = 0;
+    let maxFirstI = width * height * 4;
     for (const pixelBit of iterateBits(pictureData)) {
+        if (i > maxFirstI) {
+            // Do not draw fill bits that can be present at the last octet
+            break;
+        }
         imageData.data[i] = pixelBit ? 0 : 255; // R value
         imageData.data[i + 1] = pixelBit ? 0 : 255; // G value
         imageData.data[i + 2] = pixelBit ? 0 : 255; // B value
@@ -423,7 +428,7 @@ class Picture {
         this.width = width;
         this.height = height;
 
-        Object.freeze(this);
+        Object.seal(this);
     }
 
     renderOnCanvas(canvas) {
@@ -479,16 +484,18 @@ function renderAnimationOnCanvas(canvas, animationData, width, height) {
 }
 
 class Animation {
+    position;
+    animationData;
+    width;
+    height;
     constructor(position, animationData, width, height) {
         this.position = position;
         this.animationData = animationData;
         this.width = width;
         this.height = height;
 
-        Object.freeze(this);
+        Object.seal(this);
     }
-
-
 }
 class LargePicture extends Picture {
     constructor(position, pictureData) {
@@ -508,7 +515,33 @@ class IMelody {
     constructor(position, iMelodyString) {
         this.position = position;
         this.iMelodyString = iMelodyString;
-        Object.freeze(this);
+        Object.seal(this);
+    }
+}
+class ExtendedObject {
+    referenceNumber;
+    length;
+    mayBeForwarded;
+    isUserPrompt;
+    objectType;
+    position;
+    data;
+    constructor(referenceNumber, length, mayBeForwarded, isUserPrompt, objectType, position, data) {
+        this.referenceNumber = referenceNumber;
+        this.length = length;
+        this.mayBeForwarded = mayBeForwarded;
+        this.isUserPrompt = isUserPrompt;
+        this.objectType = objectType;
+        this.position = position;
+        this.data = data;
+        Object.seal(this);
+    }
+}
+class RawExtendedObject {
+    data;
+    constructor(data) {
+        this.data = data;
+        Object.seal(this);
     }
 }
 class UserData {
@@ -530,8 +563,12 @@ class UserData {
     iMelodies = [];
     /** @type Array.<Animation> */
     animations = [];
+    /** @type Array.<RawExtendedObject> */
+    rawExtendedObjects = [];
+    /** @type Array.<ExtendedObject> */
+    extendedObjects = [];
     constructor() {
-        Object.seal(this);           // ban undeclared props, keep mutability
+        Object.seal(this);
     }
 }
 class UserDataDecoder {
@@ -675,16 +712,61 @@ class UserDataDecoder {
                 this.#decodedUserData.pictures.push(picture);
                 bytesRead += iedl;
                 break;
+            case 0x14: //Extended object
+                const extendedObject = new RawExtendedObject(
+                    this.#cursor.take(iedl),
+                );
+                this.#decodedUserData.rawExtendedObjects.push(extendedObject);
+                bytesRead += iedl;
+                break;
             default:
-            this.#decodedUserData.errors.push(`Message contains an unsupported Information Element: ${iei.toString(16).padStart(2, '0')}`);
-            this.#cursor.take(iedl);
-            bytesRead += iedl; // skip unknown IE
+                this.#decodedUserData.errors.push(`Message contains an unsupported Information Element: ${iei.toString(16).padStart(2, '0')}`);
+                this.#cursor.take(iedl);
+                bytesRead += iedl; // skip unknown IE
         }
 
         return bytesRead;
     }
 }
+function decodeExtendedObjects(decodedPdu) {
+    for (const extendedObject of decodedPdu.extendedObjects) {
+        switch (extendedObject.objectType) {
+            case 0x02: //black and white bitmap
+                if (extendedObject.data.length < 3) {
+                    this.errors.push(`Unexpected black and white bitmap length: ${extendedObject.data.length}}`);
+                    continue;
+                }
+                const width = extendedObject.data[0];
+                const height = extendedObject.data[1];
+                decodedPdu.pictures.push(new Picture(extendedObject.position, extendedObject.data.slice(2), width, height));
+                break;
+            default:
+                decodedPdu.errors.push(`Message contains an unsupported Extended Object: ${extendedObject.objectType.toString(16).padStart(2, '0')}`);
+                break;
+        }
+    }
+}
 
+function shiftObjectPositions(decodedPdu, offset) {
+    for (const textFormatting of decodedPdu.textFormattings) {
+        textFormatting.position += offset;
+    }
+    for (const predefinedAnimation of decodedPdu.predefinedAnimations) {
+        predefinedAnimation.position += offset;
+    }
+    for (const predefinedSound of decodedPdu.predefinedSounds) {
+        predefinedSound.position += offset;
+    }
+    for (const picture of decodedPdu.pictures) {
+        picture.position += offset;
+    }
+    for (const iMelody of decodedPdu.iMelodies) {
+        iMelody.position += offset;
+    }
+    for (const animation of decodedPdu.animations) {
+        animation.position += offset;
+    }
+}
 export class PDUDecoder {
     #cursor;
 
@@ -873,7 +955,7 @@ const FileFormats = Object.freeze({
     }
 });
 
-export class SMSDecoder {
+export class SmsArchiveParser {
     decode(buf) {
         const b = buf instanceof Uint8Array ? buf : Uint8Array.from(buf);
         if (b.length <= 5) throw new Error('File too short');
@@ -906,9 +988,7 @@ export class SMSDecoder {
         if (format.segmentStatusOffset - format.timestampOffset > 7)
             cursor.take(format.segmentStatusOffset - format.timestampOffset - 7); // waste byte
 
-        let parsingResult;
-        const htmlRenderer = new HTMLRenderer();
-
+        const decodedPdus =[];
         for (let part = 0; part < segmentsTotal; part++) {
             let pdu;
             if (cursor.remaining() < 176) {
@@ -925,24 +1005,16 @@ export class SMSDecoder {
 
             const decodedPdu = new PDUDecoder().decode(pdu);
             if (decodedPdu === undefined) continue;
-
-            if (parsingResult === undefined) {
-                parsingResult = {
-                    ...decodedPdu,
-                    format: formatName,
-                    segmentsTotal,
-                    segmentsStored,
-                    html: htmlRenderer.renderSegment(decodedPdu),
-                };
-                if (dateAndTimeZoneOffset !== undefined) parsingResult.dateAndTimeZoneOffset = dateAndTimeZoneOffset;
-                if (smsType !== undefined) parsingResult.smsType = smsType;
-                if (smsStatus !== undefined) parsingResult.smsStatus = smsStatus;
-            } else {
-                parsingResult.text += decodedPdu.text;
-                parsingResult.html += htmlRenderer.renderSegment(decodedPdu);
-                parsingResult.length += decodedPdu.length;
-            }
+            decodedPdus.push(decodedPdu);
         }
+        const parsingResult = assembleSegments(decodedPdus);
+        parsingResult.segmentsTotal = segmentsTotal;
+        parsingResult.segmentsStored = segmentsStored;
+        parsingResult.format = formatName;
+        if (dateAndTimeZoneOffset !== undefined) parsingResult.dateAndTimeZoneOffset = dateAndTimeZoneOffset;
+        if (smsType !== undefined) parsingResult.smsType = smsType;
+        if (smsStatus !== undefined) parsingResult.smsStatus = smsStatus;
+
         return parsingResult;
     }
 }
@@ -982,31 +1054,87 @@ function mergeSegments(segments) {
 
     // Assemble buckets whose part list is complete
     for (const {first, total, parts} of multipartBuckets.values()) {
-        const merged = {...first}; // shallow clone
-        merged.referenceNumber = first.referenceNumber;
-        merged.totalSegments = total;
-        merged.sequenceNumber = 1;
-
-        merged.segmentsStored = 0;
-        merged.legnth = 0;
-        merged.text = '';
-        merged.html = '';
-        merged.errors = [];
-        for (const part of parts) {
-            if (part === undefined) {
-                merged.text += '<missing segment>';
-            } else {
-                merged.segmentsStored++;
-                merged.length += part.length;
-                merged.text += part.text;
-                merged.html += part.html;
-                merged.errors = [...merged.errors, ...part.errors];
-            }
-        }
-        concatenatedMessages.push(merged);
+        const assembled = assembleSegments(parts);
+        concatenatedMessages.push(assembled);
     }
 
     return concatenatedMessages;
+}
+function assembleSegments(segments) {
+    if (segments.length < 1 ) {
+        throw new Error('No segments to assemble');
+    }
+    if (segments.length === 1) return segments[0];
+
+    const merged = {...segments[0]};
+    merged.referenceNumber = segments[0].referenceNumber;
+    merged.totalSegments = segments.length;
+    merged.sequenceNumber = 1;
+    merged.segmentsStored = 0;
+    merged.rawExtendedObjects = [];
+    merged.extendedObjects = [];
+    let currentExtendedObject = undefined;
+    for (const segment of segments) {
+        for (const rawExtendedObject of segment.rawExtendedObjects) {
+            if (currentExtendedObject === undefined ) {
+                if (rawExtendedObject.data.length < 7) {
+                    segment.errors.push(`Unexpected rawExtendedObject object length: ${rawExtendedObject.data.length}`);
+                    continue;
+                }
+                const referenceNumber = rawExtendedObject[0];
+                const eoLength = (rawExtendedObject.data[1] << 8) | rawExtendedObject.data[2];
+                const controlData = rawExtendedObject.data[3];
+                const mayBeForwarded = controlData & 0b1000_0000
+                const isUserPrompt  = controlData & 0b1000_0000
+                const objectType = rawExtendedObject.data[4];
+                const eoPosition = (rawExtendedObject.data[5] << 8) | rawExtendedObject.data[6];
+                const data = rawExtendedObject.data.slice(7);
+                currentExtendedObject = new ExtendedObject(
+                    referenceNumber,
+                    eoLength,
+                    mayBeForwarded,
+                    isUserPrompt,
+                    objectType,
+                    eoPosition,
+                    data,
+                )
+            } else {
+                currentExtendedObject.data = new Uint8Array([...currentExtendedObject.data, ...rawExtendedObject.data]);
+            }
+            if (currentExtendedObject.data.length > currentExtendedObject.length) {
+                segment.errors.push(`Unexpected rawExtendedObject object length: ${currentExtendedObject.data.length}, expected ${currentExtendedObject.length}`);
+                currentExtendedObject = undefined;
+            } else if (currentExtendedObject.data.length === currentExtendedObject.length) {
+                merged.extendedObjects.push(currentExtendedObject);
+                currentExtendedObject = undefined;
+            }
+        }
+    }
+    let offset = 0;
+    for (const segment of segments) {
+        if (segment === undefined) {
+            const placeholderText= '<missing segment>'
+            merged.text += placeholderText;
+            offset += placeholderText.length;
+        } else {
+            merged.segmentsStored++;
+            merged.length += segment.length;
+            if (offset > 0) {
+                shiftObjectPositions(segment, offset);
+                merged.text += segment.text;
+                merged.errors = [...merged.errors, ...segment.errors];
+                merged.animations = [...merged.animations, ...segment.animations];
+                merged.iMelodies = [...merged.iMelodies, ...segment.iMelodies];
+                merged.pictures = [...merged.pictures, ...segment.pictures];
+                merged.predefinedAnimations = [...merged.predefinedAnimations, ...segment.predefinedAnimations];
+                merged.predefinedSounds = [...merged.predefinedSounds, ...segment.predefinedSounds];
+                merged.textFormattings = [...merged.textFormattings, ...segment.textFormattings];
+            }
+            offset += segment.text.length;
+        }
+    }
+    decodeExtendedObjects(merged);
+    return merged;
 }
 
 export class SMSDatParser {
@@ -1033,7 +1161,7 @@ export class SMSDatParser {
             const decoded = new PDUDecoder().decodeSmsDat(pdu);
             if (decoded !== undefined) {
                 decoded.messageIndex = messageIndex;
-                decoded.html = htmlRenderer.renderSegment(decoded);
+                decoded.html = htmlRenderer.renderMerged(decoded);
                 segments.push(decoded);
             }
             messageIndex++;
@@ -1101,13 +1229,13 @@ export class HTMLRenderer  {
         }[ch]));
     }
 
-    renderSegment(segment) {
+    renderMerged(mergedMessage) {
         let insertions = [];
-        for (let newlineIndex = segment.text.indexOf('\n'); newlineIndex !== -1; newlineIndex = segment.text.indexOf('\n', newlineIndex + 1)) {
+        for (let newlineIndex = mergedMessage.text.indexOf('\n'); newlineIndex !== -1; newlineIndex = mergedMessage.text.indexOf('\n', newlineIndex + 1)) {
             insertions.push({ position: newlineIndex + 1, text: '<br>' });
         }
-        insertions.push(...this.#getTextFormattingInsertions(segment));
-        for (const predefinedSound of segment.predefinedSounds) {
+        insertions.push(...this.#getTextFormattingInsertions(mergedMessage));
+        for (const predefinedSound of mergedMessage.predefinedSounds) {
             let text;
             if (predefinedSound.soundNumber > 9)  {
                 text = '&lt;Incorrect predefined sound&gt;';
@@ -1124,7 +1252,7 @@ export class HTMLRenderer  {
                 text,
             });
         }
-        for (const predefinedAnimation of segment.predefinedAnimations) {
+        for (const predefinedAnimation of mergedMessage.predefinedAnimations) {
             let text;
             if (predefinedAnimation.animationNumber >= predefinedAnimations.length)  {
                 text = '&lt;Incorrect predefined animation&gt;';
@@ -1137,16 +1265,16 @@ export class HTMLRenderer  {
                 text,
             });
         }
-        if (segment.iMelodies.length > 0) {
+        if (mergedMessage.iMelodies.length > 0) {
             if (typeof window !== 'undefined' && window.playIMelody === undefined) window.playIMelody = playIMelody;
         }
-        for (const iMelody of segment.iMelodies) {
+        for (const iMelody of mergedMessage.iMelodies) {
             const encoded = encodeURIComponent(iMelody.iMelodyString);
             insertions.push({
                 position: iMelody.position,
                 text: `<a class="i-melody" data-i-melody="${encoded}" onclick="playIMelody(decodeURIComponent(this.dataset.iMelody)); return" href="javascript:void(0)"><img style="width:13px;" src="${playButtonIcon}" alt="Play iMelody"></a>`,});
         }
-        for (const picture of segment.pictures) {
+        for (const picture of mergedMessage.pictures) {
             let pictureType;
             if (picture instanceof LargePicture) {
                 pictureType = 'large';
@@ -1163,7 +1291,7 @@ export class HTMLRenderer  {
                         >`,
             });
         }
-        for (const animation of segment.animations) {
+        for (const animation of mergedMessage.animations) {
             insertions.push({
                 position: animation.position,
                 text: `<canvas
@@ -1181,11 +1309,11 @@ export class HTMLRenderer  {
         let lastIndex = 0;
         const htmlParts = [];
         for (const { position, text } of insertions) {
-            htmlParts.push(this.#escapeHtml(segment.text.slice(lastIndex, position)));
+            htmlParts.push(this.#escapeHtml(mergedMessage.text.slice(lastIndex, position)));
             htmlParts.push(text);
             lastIndex = position;
         }
-        htmlParts.push(this.#escapeHtml(segment.text.slice(lastIndex)));
+        htmlParts.push(this.#escapeHtml(mergedMessage.text.slice(lastIndex)));
 
         return htmlParts.join('');
     }

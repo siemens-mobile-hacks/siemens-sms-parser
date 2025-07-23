@@ -2,7 +2,7 @@
 
 import {promises as fs} from 'node:fs';
 import {join, resolve} from 'node:path';
-import {formatTimestampToIsoWithOffset, SMSDatParser, SMSDecoder} from './sms-parser.js';
+import {formatTimestampToIsoWithOffset, SMSDatParser, SmsArchiveParser, HTMLRenderer} from './sms-parser.js';
 
 const args   = process.argv.slice(2);
 const debug  = args.includes('--debug');
@@ -30,9 +30,11 @@ function formatOutput(decoded) {
     output += `Text: ${decoded.text}\n`;
     if (debug) {
         output += `HTML:\n`;
+        const htmlRenderer = new HTMLRenderer();
+        const html = htmlRenderer.renderMerged(decoded);
+        html.split('\n').forEach(line => output += `    ${line}\n`);
     }
 
-    decoded.html.split('\n').forEach(line => output += `    ${line}\n`);
     return output;
 }
 
@@ -46,7 +48,7 @@ async function processFile(file) {
                 console.log(formatOutput(messages[i]));
             }
         } else {
-            const decoded = new SMSDecoder().decode(raw);
+            const decoded = new SmsArchiveParser().decode(raw);
             console.log(formatOutput(decoded));
         }
     } catch (e) {

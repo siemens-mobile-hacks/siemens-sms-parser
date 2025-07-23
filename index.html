@@ -82,7 +82,7 @@
 <div id="resultsContainer"></div>
 
 <script type="module">
-  import { SMSDecoder, SMSDatParser, HTMLRenderer, formatTimestampToIsoWithOffset } from './sms-parser.js';
+  import { SmsArchiveParser, SMSDatParser, HTMLRenderer, formatTimestampToIsoWithOffset } from './sms-parser.js';
 
   const fileInput  = document.getElementById("fileInput");
   const dirInput   = document.getElementById("dirInput");
@@ -98,7 +98,7 @@
     if (!files.length){ return; }  // nothing picked yet
     document.querySelector('body').classList.add("loading");
     const grouped = {};
-
+    const htmlRenderer = new HTMLRenderer();
     for (const file of files){
       try{
         const arrayBuffer = await file.arrayBuffer();
@@ -107,7 +107,7 @@
           const decoder = new SMSDatParser();
           messages = decoder.decode(new Uint8Array(arrayBuffer));
         } else {
-          const decoder = new SMSDecoder();
+          const decoder = new SmsArchiveParser();
           messages = [decoder.decode(new Uint8Array(arrayBuffer))];
         }
 
@@ -115,7 +115,7 @@
           const phone = msg.type === "Incoming"
                   ? msg.sender
                   : msg.recipient || "Unknown";
-
+          msg.html = htmlRenderer.renderMerged(msg);
           msg.file = file
           grouped[phone] ??= [];
           grouped[phone].push(msg);
