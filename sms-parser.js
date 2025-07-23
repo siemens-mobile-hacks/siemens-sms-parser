@@ -1278,8 +1278,10 @@ export class HTMLRenderer  {
             let pictureType;
             if (picture instanceof LargePicture) {
                 pictureType = 'large';
-            } else {
+            } else if (picture instanceof SmallPicture) {
                 pictureType = 'small';
+            } else {
+                pictureType = 'custom';
             }
             insertions.push({
                 position: picture.position,
