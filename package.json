@@ -17,7 +17,7 @@
     "type": "git",
     "url": "https://github.com/siemens-mobile-hacks/siemens-sms-parser.git"
   },
-  "license": "ISC",
+  "license": "MIT",
   "author": {
     "name": "Konstantin Pereiaslov",
     "url": "https://github.com/perk11"
