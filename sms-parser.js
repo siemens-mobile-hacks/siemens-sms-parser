@@ -548,7 +548,7 @@ class UserData {
     referenceNumber = undefined;   // integer (0-255 or 0-65535)
     segmentsTotal = undefined;   // integer 1-255
     sequenceNumber = undefined;   // integer 1-255
-    encoding = undefined;   // 'GSM-7' | 'ASCII' | 'UCS-2'
+    encoding = undefined;   // 'GSM-7' | 'Data' | 'UCS-2'
     text = undefined;   // string
     length = undefined;   // non-negative integer
     errors=[];
@@ -599,9 +599,9 @@ class UserDataDecoder {
                 this.#decodedUserData.length = (udl - headerOctetCount) / 2
                 break;
             case 8:
-                this.#decodedUserData.encoding = 'ASCII';
+                this.#decodedUserData.encoding = 'Data';
                 this.#decodedUserData.text = octetDecode(smData, 0);
-                this.#decodedUserData.ength = (udl - headerOctetCount) / 2
+                this.#decodedUserData.length = (udl - headerOctetCount) / 2
                 break;
             case 7:
                 this.#decodedUserData.encoding = 'GSM-7';

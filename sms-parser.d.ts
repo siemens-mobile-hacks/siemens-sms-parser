@@ -344,7 +344,7 @@ export class UserData {
   /**
    * Encoding
    */
-  encoding?: 'GSM-7' | 'ASCII' | 'UCS-2';
+  encoding?: 'GSM-7' | 'Data' | 'UCS-2';
 
   /**
    * Text content
@@ -449,7 +449,7 @@ export interface DecodedPDU {
   /**
    * Encoding
    */
-  encoding?: 'GSM-7' | 'ASCII' | 'UCS-2';
+  encoding?: 'GSM-7' | 'Data' | 'UCS-2';
 
   /**
    * Text content
