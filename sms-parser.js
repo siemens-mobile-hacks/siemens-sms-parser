@@ -1,4 +1,4 @@
-import {playIMelody} from "./imelody.js";
+import {playIMelody} from "./node_modules/imelody-play/imelody.js";
 
 const bytesEqual = (a, b) =>
     a.length === b.length && a.every((v, i) => v === b[i]);
